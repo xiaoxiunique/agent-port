@@ -1,8 +1,10 @@
 # Agent Port
 
-Cross-platform Flutter client for [Agent Monitor](../agent-monitor) — monitor and control agent sessions (Claude Code, Codex, …) running in tmux on your Mac.
+Local-first monitor and control surface for agent sessions (Claude Code, Codex, …) running in tmux on your Mac.
 
-One Dart codebase, six platforms (iOS / Android / macOS / Linux / Windows / Web). Connects to the Rust Agent Monitor service over HTTP + WebSocket.
+Ships as two parts in this repo:
+- **`AgentMonitorService/`** — Rust service (Axum + portable-pty + tmux)
+- **Flutter client** (`lib/`) — one Dart codebase, six platforms (iOS / Android / macOS / Linux / Windows / Web)
 
 ## Features
 
@@ -17,10 +19,20 @@ One Dart codebase, six platforms (iOS / Android / macOS / Linux / Windows / Web)
 
 ## Requirements
 
-- The Agent Monitor **Rust service** running on each Mac you want to monitor (it serves the HTTP/WebSocket API this client consumes). See the `agent-monitor` repo.
 - Flutter 3.13+ / Dart 3.x.
+- Rust toolchain (for the service).
+- tmux (on each monitored Mac).
 
 ## Run
+
+**1. Build & start the Rust service** (polls tmux, serves HTTP/WebSocket):
+
+```bash
+cargo run --manifest-path AgentMonitorService/Cargo.toml
+# serves http://0.0.0.0:8787
+```
+
+**2. Run the Flutter client** (connects to the service):
 
 ```bash
 flutter pub get
@@ -42,7 +54,8 @@ On first launch, onboarding asks for the service URL (+ optional token).
 ## Architecture
 
 ```
-lib/
+AgentMonitorService/   Rust service (Axum + portable-pty + tmux): the HTTP/WS API
+lib/                   Flutter client (consumes that API)
 ├── core/            router, theme
 ├── data/
 │   ├── api/         AgentMonitorApi (dio, 11 endpoints)
@@ -51,7 +64,7 @@ lib/
 └── features/        monitor, pane_detail (terminal/actions/status), settings, onboarding, control_center
 ```
 
-The client reuses the Rust service's API verbatim — no server-side changes.
+The Flutter client consumes the Rust service's HTTP/WebSocket API.
 
 ## License
 
