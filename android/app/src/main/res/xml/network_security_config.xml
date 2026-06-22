@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Allow cleartext HTTP for local/trusted networks.
+  Agent Port connects to a Rust service on plain HTTP — TLS is expected to
+  be handled by the network layer (Tailscale / WireGuard) for remote access.
+  This is a local-first app not intended for the public internet.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

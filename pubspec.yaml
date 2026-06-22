@@ -1,0 +1,45 @@
+name: agent_port
+description: "Agent Port — Flutter client for Agent Monitor (tmux agent session monitor & control)."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State management (2.x — avoids analyzer conflict with codegen toolchain)
+  flutter_riverpod: ^2.6.1
+
+  # Networking
+  dio: ^5.9.2
+  web_socket_channel: ^3.0.3
+
+  # Routing
+  go_router: ^17.3.0
+
+  # Models / codegen annotations
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.9.0
+  xterm: ^4.0.0
+  shared_preferences: ^2.5.5
+  tray_manager: ^0.5.3
+  image_picker: ^1.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Codegen
+  build_runner: ^2.4.13
+  freezed: ^3.1.0
+  json_serializable: ^6.9.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/tray_icon.png
