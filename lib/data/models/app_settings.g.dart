@@ -15,6 +15,23 @@ _AppSettings _$AppSettingsFromJson(Map<String, dynamic> json) => _AppSettings(
   activeProfileId: json['activeProfileId'] as String? ?? '',
   hasCompletedOnboarding: json['hasCompletedOnboarding'] as bool? ?? false,
   refreshInterval: (json['refreshInterval'] as num?)?.toDouble() ?? 2.5,
+  keepScreenAwake: json['keepScreenAwake'] as bool? ?? false,
+  quickActionButtons:
+      (json['quickActionButtons'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [],
+  pinnedProjects:
+      (json['pinnedProjects'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [],
+  voiceRecognitionProvider:
+      json['voiceRecognitionProvider'] as String? ?? 'system',
+  tencentAsrAppId: json['tencentAsrAppId'] as String? ?? '',
+  tencentAsrSecretId: json['tencentAsrSecretId'] as String? ?? '',
+  tencentAsrSecretKey: json['tencentAsrSecretKey'] as String? ?? '',
+  tencentAsrToken: json['tencentAsrToken'] as String? ?? '',
 );
 
 Map<String, dynamic> _$AppSettingsToJson(_AppSettings instance) =>
@@ -23,4 +40,12 @@ Map<String, dynamic> _$AppSettingsToJson(_AppSettings instance) =>
       'activeProfileId': instance.activeProfileId,
       'hasCompletedOnboarding': instance.hasCompletedOnboarding,
       'refreshInterval': instance.refreshInterval,
+      'keepScreenAwake': instance.keepScreenAwake,
+      'quickActionButtons': instance.quickActionButtons,
+      'pinnedProjects': instance.pinnedProjects,
+      'voiceRecognitionProvider': instance.voiceRecognitionProvider,
+      'tencentAsrAppId': instance.tencentAsrAppId,
+      'tencentAsrSecretId': instance.tencentAsrSecretId,
+      'tencentAsrSecretKey': instance.tencentAsrSecretKey,
+      'tencentAsrToken': instance.tencentAsrToken,
     };

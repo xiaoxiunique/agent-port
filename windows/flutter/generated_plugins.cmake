@@ -4,6 +4,8 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_windows
+  record_windows
+  speech_to_text_windows
   tray_manager
 )
 

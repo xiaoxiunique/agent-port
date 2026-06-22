@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'core/router.dart';
 import 'core/theme.dart';
 import 'services/host_service.dart';
+import 'services/settings_service.dart';
 import 'services/tray_service.dart';
 
 class AgentPortApp extends ConsumerStatefulWidget {
@@ -32,10 +34,16 @@ class _AgentPortAppState extends ConsumerState<AgentPortApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Keep-screen-awake toggle (mobile only; no-op elsewhere).
+    if (Platform.isIOS || Platform.isAndroid) {
+      final keepAwake =
+          ref.watch(settingsProvider.select((s) => s.valueOrNull?.keepScreenAwake ?? false));
+      WakelockPlus.toggle(enable: keepAwake);
+    }
     return MaterialApp.router(
       title: 'Agent Port',
-      themeMode: ThemeMode.dark,
-      theme: AgentPortTheme.dark,
+      themeMode: ThemeMode.system,
+      theme: AgentPortTheme.light,
       darkTheme: AgentPortTheme.dark,
       routerConfig: ref.watch(routerProvider),
       debugShowCheckedModeBanner: false,

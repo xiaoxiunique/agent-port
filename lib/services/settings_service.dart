@@ -10,6 +10,14 @@ const _profilesKey = 'app_settings_profiles';
 const _activeKey = 'active_profile_id';
 const _onboardingKey = 'has_completed_onboarding';
 const _refreshKey = 'refresh_interval';
+const _keepAwakeKey = 'keep_screen_awake';
+const _quickButtonsKey = 'quick_action_buttons';
+const _pinnedKey = 'pinned_projects';
+const _voiceProviderKey = 'voice_recognition_provider';
+const _tcAppIdKey = 'tencent_asr_app_id';
+const _tcSecretIdKey = 'tencent_asr_secret_id';
+const _tcSecretKeyKey = 'tencent_asr_secret_key';
+const _tcTokenKey = 'tencent_asr_token';
 
 /// Persists [AppSettings] in shared preferences (profiles include tokens;
 /// local-first, mirrors iOS UserDefaults).
@@ -46,6 +54,14 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       activeProfileId: activeId,
       hasCompletedOnboarding: _prefs.getBool(_onboardingKey) ?? false,
       refreshInterval: _prefs.getDouble(_refreshKey) ?? 2.5,
+      keepScreenAwake: _prefs.getBool(_keepAwakeKey) ?? false,
+      quickActionButtons: _prefs.getStringList(_quickButtonsKey) ?? const [],
+      pinnedProjects: _prefs.getStringList(_pinnedKey) ?? const [],
+      voiceRecognitionProvider: _prefs.getString(_voiceProviderKey) ?? 'system',
+      tencentAsrAppId: _prefs.getString(_tcAppIdKey) ?? '',
+      tencentAsrSecretId: _prefs.getString(_tcSecretIdKey) ?? '',
+      tencentAsrSecretKey: _prefs.getString(_tcSecretKeyKey) ?? '',
+      tencentAsrToken: _prefs.getString(_tcTokenKey) ?? '',
     );
   }
 
@@ -57,6 +73,14 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     await _prefs.setString(_activeKey, s.activeProfileId);
     await _prefs.setBool(_onboardingKey, s.hasCompletedOnboarding);
     await _prefs.setDouble(_refreshKey, s.refreshInterval);
+    await _prefs.setBool(_keepAwakeKey, s.keepScreenAwake);
+    await _prefs.setStringList(_quickButtonsKey, s.quickActionButtons);
+    await _prefs.setStringList(_pinnedKey, s.pinnedProjects);
+    await _prefs.setString(_voiceProviderKey, s.voiceRecognitionProvider);
+    await _prefs.setString(_tcAppIdKey, s.tencentAsrAppId);
+    await _prefs.setString(_tcSecretIdKey, s.tencentAsrSecretId);
+    await _prefs.setString(_tcSecretKeyKey, s.tencentAsrSecretKey);
+    await _prefs.setString(_tcTokenKey, s.tencentAsrToken);
   }
 
   Future<void> addProfile(ServerProfile p) async {
@@ -112,6 +136,57 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     final s = state.valueOrNull;
     if (s == null) return;
     final updated = s.copyWith(refreshInterval: v);
+    state = AsyncData(updated);
+    await _persist(updated);
+  }
+
+  Future<void> setKeepScreenAwake(bool v) async {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    final updated = s.copyWith(keepScreenAwake: v);
+    state = AsyncData(updated);
+    await _persist(updated);
+  }
+
+  Future<void> setQuickActionButtons(List<String> v) async {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    final updated = s.copyWith(quickActionButtons: v);
+    state = AsyncData(updated);
+    await _persist(updated);
+  }
+
+  Future<void> setVoiceSettings({
+    String? provider,
+    String? appId,
+    String? secretId,
+    String? secretKey,
+    String? token,
+  }) async {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    final updated = s.copyWith(
+      voiceRecognitionProvider: provider ?? s.voiceRecognitionProvider,
+      tencentAsrAppId: appId ?? s.tencentAsrAppId,
+      tencentAsrSecretId: secretId ?? s.tencentAsrSecretId,
+      tencentAsrSecretKey: secretKey ?? s.tencentAsrSecretKey,
+      tencentAsrToken: token ?? s.tencentAsrToken,
+    );
+    state = AsyncData(updated);
+    await _persist(updated);
+  }
+
+  /// Reset preferences (refresh cadence, screen-awake, quick buttons, pins) to
+  /// defaults. Server profiles and onboarding are preserved.
+  Future<void> resetSettings() async {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    final updated = s.copyWith(
+      refreshInterval: 2.5,
+      keepScreenAwake: false,
+      quickActionButtons: const [],
+      pinnedProjects: const [],
+    );
     state = AsyncData(updated);
     await _persist(updated);
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
+import '../../core/theme.dart';
 import '../../data/api/agent_monitor_api.dart';
 import '../../services/terminal_session.dart';
 
@@ -43,18 +44,23 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Positioned.fill(
-          child: TerminalView(
-            _session.terminal,
-            autofocus: true,
-            simulateScroll: false,
+    return Container(
+      color: AgentPortTheme.terminalBackground,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: TerminalView(
+              _session.terminal,
+              theme: AgentPortTheme.terminalTheme,
+              backgroundOpacity: 1,
+              autofocus: true,
+              simulateScroll: false,
+            ),
           ),
-        ),
-        if (_session.state != TerminalConnectionState.ready) _buildOverlay(),
-      ],
+          if (_session.state != TerminalConnectionState.ready) _buildOverlay(),
+        ],
+      ),
     );
   }
 

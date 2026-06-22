@@ -17,7 +17,7 @@ Snapshot _fakeSnapshot() => Snapshot(
         Pane(
           id: 'p1',
           target: 's:0.0',
-          session: 'cc-myproject_abc123',
+          session: 'cc_myproject_abc123',
           windowIndex: '0',
           windowName: 'work',
           paneIndex: '0',
@@ -68,7 +68,7 @@ class _OnboardedSettingsNotifier extends SettingsNotifier {
 }
 
 void main() {
-  testWidgets('renders pane list with status chips and metrics',
+  testWidgets('renders pane cards with project names and titles',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -81,18 +81,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // two status chips
-    expect(find.text('waiting'), findsOneWidget);
-    expect(find.text('running'), findsOneWidget);
-    // command title from p1 (command non-empty)
+    // Project names derived from the session (AppSettings.projectName):
+    // 'cc_myproject_abc123' -> 'myproject', 'cx_other_def' -> 'other'.
+    expect(find.text('myproject'), findsOneWidget);
+    expect(find.text('other'), findsOneWidget);
+    // displayTitle for p1 falls back to its command.
     expect(find.text('claude'), findsWidgets);
-    // system metrics
-    expect(find.text('CPU'), findsOneWidget);
-    expect(find.text('42%'), findsOneWidget);
-    expect(find.text('MEM'), findsOneWidget);
-    expect(find.text('60%'), findsOneWidget);
-    // last-line preview from p1 tail
-    expect(find.text('line two'), findsOneWidget);
+    // Two brand avatars (Claude + Codex) and two chevrons.
+    expect(find.byType(Image), findsNWidgets(2));
+    expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
   });
 
   testWidgets('shows empty state when no panes', (tester) async {

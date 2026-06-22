@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$AppSettings {
 
- List<ServerProfile> get profiles; String get activeProfileId; bool get hasCompletedOnboarding; double get refreshInterval;
+ List<ServerProfile> get profiles; String get activeProfileId; bool get hasCompletedOnboarding; double get refreshInterval; bool get keepScreenAwake; List<String> get quickActionButtons; List<String> get pinnedProjects; String get voiceRecognitionProvider; String get tencentAsrAppId; String get tencentAsrSecretId; String get tencentAsrSecretKey; String get tencentAsrToken;
 /// Create a copy of AppSettings
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $AppSettingsCopyWith<AppSettings> get copyWith => _$AppSettingsCopyWithImpl<AppS
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppSettings&&const DeepCollectionEquality().equals(other.profiles, profiles)&&(identical(other.activeProfileId, activeProfileId) || other.activeProfileId == activeProfileId)&&(identical(other.hasCompletedOnboarding, hasCompletedOnboarding) || other.hasCompletedOnboarding == hasCompletedOnboarding)&&(identical(other.refreshInterval, refreshInterval) || other.refreshInterval == refreshInterval));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppSettings&&const DeepCollectionEquality().equals(other.profiles, profiles)&&(identical(other.activeProfileId, activeProfileId) || other.activeProfileId == activeProfileId)&&(identical(other.hasCompletedOnboarding, hasCompletedOnboarding) || other.hasCompletedOnboarding == hasCompletedOnboarding)&&(identical(other.refreshInterval, refreshInterval) || other.refreshInterval == refreshInterval)&&(identical(other.keepScreenAwake, keepScreenAwake) || other.keepScreenAwake == keepScreenAwake)&&const DeepCollectionEquality().equals(other.quickActionButtons, quickActionButtons)&&const DeepCollectionEquality().equals(other.pinnedProjects, pinnedProjects)&&(identical(other.voiceRecognitionProvider, voiceRecognitionProvider) || other.voiceRecognitionProvider == voiceRecognitionProvider)&&(identical(other.tencentAsrAppId, tencentAsrAppId) || other.tencentAsrAppId == tencentAsrAppId)&&(identical(other.tencentAsrSecretId, tencentAsrSecretId) || other.tencentAsrSecretId == tencentAsrSecretId)&&(identical(other.tencentAsrSecretKey, tencentAsrSecretKey) || other.tencentAsrSecretKey == tencentAsrSecretKey)&&(identical(other.tencentAsrToken, tencentAsrToken) || other.tencentAsrToken == tencentAsrToken));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(profiles),activeProfileId,hasCompletedOnboarding,refreshInterval);
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(profiles),activeProfileId,hasCompletedOnboarding,refreshInterval,keepScreenAwake,const DeepCollectionEquality().hash(quickActionButtons),const DeepCollectionEquality().hash(pinnedProjects),voiceRecognitionProvider,tencentAsrAppId,tencentAsrSecretId,tencentAsrSecretKey,tencentAsrToken);
 
 @override
 String toString() {
-  return 'AppSettings(profiles: $profiles, activeProfileId: $activeProfileId, hasCompletedOnboarding: $hasCompletedOnboarding, refreshInterval: $refreshInterval)';
+  return 'AppSettings(profiles: $profiles, activeProfileId: $activeProfileId, hasCompletedOnboarding: $hasCompletedOnboarding, refreshInterval: $refreshInterval, keepScreenAwake: $keepScreenAwake, quickActionButtons: $quickActionButtons, pinnedProjects: $pinnedProjects, voiceRecognitionProvider: $voiceRecognitionProvider, tencentAsrAppId: $tencentAsrAppId, tencentAsrSecretId: $tencentAsrSecretId, tencentAsrSecretKey: $tencentAsrSecretKey, tencentAsrToken: $tencentAsrToken)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $AppSettingsCopyWith<$Res>  {
   factory $AppSettingsCopyWith(AppSettings value, $Res Function(AppSettings) _then) = _$AppSettingsCopyWithImpl;
 @useResult
 $Res call({
- List<ServerProfile> profiles, String activeProfileId, bool hasCompletedOnboarding, double refreshInterval
+ List<ServerProfile> profiles, String activeProfileId, bool hasCompletedOnboarding, double refreshInterval, bool keepScreenAwake, List<String> quickActionButtons, List<String> pinnedProjects, String voiceRecognitionProvider, String tencentAsrAppId, String tencentAsrSecretId, String tencentAsrSecretKey, String tencentAsrToken
 });
 
 
@@ -65,13 +65,21 @@ class _$AppSettingsCopyWithImpl<$Res>
 
 /// Create a copy of AppSettings
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? profiles = null,Object? activeProfileId = null,Object? hasCompletedOnboarding = null,Object? refreshInterval = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? profiles = null,Object? activeProfileId = null,Object? hasCompletedOnboarding = null,Object? refreshInterval = null,Object? keepScreenAwake = null,Object? quickActionButtons = null,Object? pinnedProjects = null,Object? voiceRecognitionProvider = null,Object? tencentAsrAppId = null,Object? tencentAsrSecretId = null,Object? tencentAsrSecretKey = null,Object? tencentAsrToken = null,}) {
   return _then(_self.copyWith(
 profiles: null == profiles ? _self.profiles : profiles // ignore: cast_nullable_to_non_nullable
 as List<ServerProfile>,activeProfileId: null == activeProfileId ? _self.activeProfileId : activeProfileId // ignore: cast_nullable_to_non_nullable
 as String,hasCompletedOnboarding: null == hasCompletedOnboarding ? _self.hasCompletedOnboarding : hasCompletedOnboarding // ignore: cast_nullable_to_non_nullable
 as bool,refreshInterval: null == refreshInterval ? _self.refreshInterval : refreshInterval // ignore: cast_nullable_to_non_nullable
-as double,
+as double,keepScreenAwake: null == keepScreenAwake ? _self.keepScreenAwake : keepScreenAwake // ignore: cast_nullable_to_non_nullable
+as bool,quickActionButtons: null == quickActionButtons ? _self.quickActionButtons : quickActionButtons // ignore: cast_nullable_to_non_nullable
+as List<String>,pinnedProjects: null == pinnedProjects ? _self.pinnedProjects : pinnedProjects // ignore: cast_nullable_to_non_nullable
+as List<String>,voiceRecognitionProvider: null == voiceRecognitionProvider ? _self.voiceRecognitionProvider : voiceRecognitionProvider // ignore: cast_nullable_to_non_nullable
+as String,tencentAsrAppId: null == tencentAsrAppId ? _self.tencentAsrAppId : tencentAsrAppId // ignore: cast_nullable_to_non_nullable
+as String,tencentAsrSecretId: null == tencentAsrSecretId ? _self.tencentAsrSecretId : tencentAsrSecretId // ignore: cast_nullable_to_non_nullable
+as String,tencentAsrSecretKey: null == tencentAsrSecretKey ? _self.tencentAsrSecretKey : tencentAsrSecretKey // ignore: cast_nullable_to_non_nullable
+as String,tencentAsrToken: null == tencentAsrToken ? _self.tencentAsrToken : tencentAsrToken // ignore: cast_nullable_to_non_nullable
+as String,
   ));
 }
 
@@ -156,10 +164,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( List<ServerProfile> profiles,  String activeProfileId,  bool hasCompletedOnboarding,  double refreshInterval)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( List<ServerProfile> profiles,  String activeProfileId,  bool hasCompletedOnboarding,  double refreshInterval,  bool keepScreenAwake,  List<String> quickActionButtons,  List<String> pinnedProjects,  String voiceRecognitionProvider,  String tencentAsrAppId,  String tencentAsrSecretId,  String tencentAsrSecretKey,  String tencentAsrToken)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _AppSettings() when $default != null:
-return $default(_that.profiles,_that.activeProfileId,_that.hasCompletedOnboarding,_that.refreshInterval);case _:
+return $default(_that.profiles,_that.activeProfileId,_that.hasCompletedOnboarding,_that.refreshInterval,_that.keepScreenAwake,_that.quickActionButtons,_that.pinnedProjects,_that.voiceRecognitionProvider,_that.tencentAsrAppId,_that.tencentAsrSecretId,_that.tencentAsrSecretKey,_that.tencentAsrToken);case _:
   return orElse();
 
 }
@@ -177,10 +185,10 @@ return $default(_that.profiles,_that.activeProfileId,_that.hasCompletedOnboardin
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( List<ServerProfile> profiles,  String activeProfileId,  bool hasCompletedOnboarding,  double refreshInterval)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( List<ServerProfile> profiles,  String activeProfileId,  bool hasCompletedOnboarding,  double refreshInterval,  bool keepScreenAwake,  List<String> quickActionButtons,  List<String> pinnedProjects,  String voiceRecognitionProvider,  String tencentAsrAppId,  String tencentAsrSecretId,  String tencentAsrSecretKey,  String tencentAsrToken)  $default,) {final _that = this;
 switch (_that) {
 case _AppSettings():
-return $default(_that.profiles,_that.activeProfileId,_that.hasCompletedOnboarding,_that.refreshInterval);case _:
+return $default(_that.profiles,_that.activeProfileId,_that.hasCompletedOnboarding,_that.refreshInterval,_that.keepScreenAwake,_that.quickActionButtons,_that.pinnedProjects,_that.voiceRecognitionProvider,_that.tencentAsrAppId,_that.tencentAsrSecretId,_that.tencentAsrSecretKey,_that.tencentAsrToken);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -197,10 +205,10 @@ return $default(_that.profiles,_that.activeProfileId,_that.hasCompletedOnboardin
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( List<ServerProfile> profiles,  String activeProfileId,  bool hasCompletedOnboarding,  double refreshInterval)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( List<ServerProfile> profiles,  String activeProfileId,  bool hasCompletedOnboarding,  double refreshInterval,  bool keepScreenAwake,  List<String> quickActionButtons,  List<String> pinnedProjects,  String voiceRecognitionProvider,  String tencentAsrAppId,  String tencentAsrSecretId,  String tencentAsrSecretKey,  String tencentAsrToken)?  $default,) {final _that = this;
 switch (_that) {
 case _AppSettings() when $default != null:
-return $default(_that.profiles,_that.activeProfileId,_that.hasCompletedOnboarding,_that.refreshInterval);case _:
+return $default(_that.profiles,_that.activeProfileId,_that.hasCompletedOnboarding,_that.refreshInterval,_that.keepScreenAwake,_that.quickActionButtons,_that.pinnedProjects,_that.voiceRecognitionProvider,_that.tencentAsrAppId,_that.tencentAsrSecretId,_that.tencentAsrSecretKey,_that.tencentAsrToken);case _:
   return null;
 
 }
@@ -212,7 +220,7 @@ return $default(_that.profiles,_that.activeProfileId,_that.hasCompletedOnboardin
 @JsonSerializable()
 
 class _AppSettings implements AppSettings {
-  const _AppSettings({final  List<ServerProfile> profiles = const [], this.activeProfileId = '', this.hasCompletedOnboarding = false, this.refreshInterval = 2.5}): _profiles = profiles;
+  const _AppSettings({final  List<ServerProfile> profiles = const [], this.activeProfileId = '', this.hasCompletedOnboarding = false, this.refreshInterval = 2.5, this.keepScreenAwake = false, final  List<String> quickActionButtons = const [], final  List<String> pinnedProjects = const [], this.voiceRecognitionProvider = 'system', this.tencentAsrAppId = '', this.tencentAsrSecretId = '', this.tencentAsrSecretKey = '', this.tencentAsrToken = ''}): _profiles = profiles,_quickActionButtons = quickActionButtons,_pinnedProjects = pinnedProjects;
   factory _AppSettings.fromJson(Map<String, dynamic> json) => _$AppSettingsFromJson(json);
 
  final  List<ServerProfile> _profiles;
@@ -225,6 +233,26 @@ class _AppSettings implements AppSettings {
 @override@JsonKey() final  String activeProfileId;
 @override@JsonKey() final  bool hasCompletedOnboarding;
 @override@JsonKey() final  double refreshInterval;
+@override@JsonKey() final  bool keepScreenAwake;
+ final  List<String> _quickActionButtons;
+@override@JsonKey() List<String> get quickActionButtons {
+  if (_quickActionButtons is EqualUnmodifiableListView) return _quickActionButtons;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_quickActionButtons);
+}
+
+ final  List<String> _pinnedProjects;
+@override@JsonKey() List<String> get pinnedProjects {
+  if (_pinnedProjects is EqualUnmodifiableListView) return _pinnedProjects;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_pinnedProjects);
+}
+
+@override@JsonKey() final  String voiceRecognitionProvider;
+@override@JsonKey() final  String tencentAsrAppId;
+@override@JsonKey() final  String tencentAsrSecretId;
+@override@JsonKey() final  String tencentAsrSecretKey;
+@override@JsonKey() final  String tencentAsrToken;
 
 /// Create a copy of AppSettings
 /// with the given fields replaced by the non-null parameter values.
@@ -239,16 +267,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AppSettings&&const DeepCollectionEquality().equals(other._profiles, _profiles)&&(identical(other.activeProfileId, activeProfileId) || other.activeProfileId == activeProfileId)&&(identical(other.hasCompletedOnboarding, hasCompletedOnboarding) || other.hasCompletedOnboarding == hasCompletedOnboarding)&&(identical(other.refreshInterval, refreshInterval) || other.refreshInterval == refreshInterval));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AppSettings&&const DeepCollectionEquality().equals(other._profiles, _profiles)&&(identical(other.activeProfileId, activeProfileId) || other.activeProfileId == activeProfileId)&&(identical(other.hasCompletedOnboarding, hasCompletedOnboarding) || other.hasCompletedOnboarding == hasCompletedOnboarding)&&(identical(other.refreshInterval, refreshInterval) || other.refreshInterval == refreshInterval)&&(identical(other.keepScreenAwake, keepScreenAwake) || other.keepScreenAwake == keepScreenAwake)&&const DeepCollectionEquality().equals(other._quickActionButtons, _quickActionButtons)&&const DeepCollectionEquality().equals(other._pinnedProjects, _pinnedProjects)&&(identical(other.voiceRecognitionProvider, voiceRecognitionProvider) || other.voiceRecognitionProvider == voiceRecognitionProvider)&&(identical(other.tencentAsrAppId, tencentAsrAppId) || other.tencentAsrAppId == tencentAsrAppId)&&(identical(other.tencentAsrSecretId, tencentAsrSecretId) || other.tencentAsrSecretId == tencentAsrSecretId)&&(identical(other.tencentAsrSecretKey, tencentAsrSecretKey) || other.tencentAsrSecretKey == tencentAsrSecretKey)&&(identical(other.tencentAsrToken, tencentAsrToken) || other.tencentAsrToken == tencentAsrToken));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_profiles),activeProfileId,hasCompletedOnboarding,refreshInterval);
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_profiles),activeProfileId,hasCompletedOnboarding,refreshInterval,keepScreenAwake,const DeepCollectionEquality().hash(_quickActionButtons),const DeepCollectionEquality().hash(_pinnedProjects),voiceRecognitionProvider,tencentAsrAppId,tencentAsrSecretId,tencentAsrSecretKey,tencentAsrToken);
 
 @override
 String toString() {
-  return 'AppSettings(profiles: $profiles, activeProfileId: $activeProfileId, hasCompletedOnboarding: $hasCompletedOnboarding, refreshInterval: $refreshInterval)';
+  return 'AppSettings(profiles: $profiles, activeProfileId: $activeProfileId, hasCompletedOnboarding: $hasCompletedOnboarding, refreshInterval: $refreshInterval, keepScreenAwake: $keepScreenAwake, quickActionButtons: $quickActionButtons, pinnedProjects: $pinnedProjects, voiceRecognitionProvider: $voiceRecognitionProvider, tencentAsrAppId: $tencentAsrAppId, tencentAsrSecretId: $tencentAsrSecretId, tencentAsrSecretKey: $tencentAsrSecretKey, tencentAsrToken: $tencentAsrToken)';
 }
 
 
@@ -259,7 +287,7 @@ abstract mixin class _$AppSettingsCopyWith<$Res> implements $AppSettingsCopyWith
   factory _$AppSettingsCopyWith(_AppSettings value, $Res Function(_AppSettings) _then) = __$AppSettingsCopyWithImpl;
 @override @useResult
 $Res call({
- List<ServerProfile> profiles, String activeProfileId, bool hasCompletedOnboarding, double refreshInterval
+ List<ServerProfile> profiles, String activeProfileId, bool hasCompletedOnboarding, double refreshInterval, bool keepScreenAwake, List<String> quickActionButtons, List<String> pinnedProjects, String voiceRecognitionProvider, String tencentAsrAppId, String tencentAsrSecretId, String tencentAsrSecretKey, String tencentAsrToken
 });
 
 
@@ -276,13 +304,21 @@ class __$AppSettingsCopyWithImpl<$Res>
 
 /// Create a copy of AppSettings
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? profiles = null,Object? activeProfileId = null,Object? hasCompletedOnboarding = null,Object? refreshInterval = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? profiles = null,Object? activeProfileId = null,Object? hasCompletedOnboarding = null,Object? refreshInterval = null,Object? keepScreenAwake = null,Object? quickActionButtons = null,Object? pinnedProjects = null,Object? voiceRecognitionProvider = null,Object? tencentAsrAppId = null,Object? tencentAsrSecretId = null,Object? tencentAsrSecretKey = null,Object? tencentAsrToken = null,}) {
   return _then(_AppSettings(
 profiles: null == profiles ? _self._profiles : profiles // ignore: cast_nullable_to_non_nullable
 as List<ServerProfile>,activeProfileId: null == activeProfileId ? _self.activeProfileId : activeProfileId // ignore: cast_nullable_to_non_nullable
 as String,hasCompletedOnboarding: null == hasCompletedOnboarding ? _self.hasCompletedOnboarding : hasCompletedOnboarding // ignore: cast_nullable_to_non_nullable
 as bool,refreshInterval: null == refreshInterval ? _self.refreshInterval : refreshInterval // ignore: cast_nullable_to_non_nullable
-as double,
+as double,keepScreenAwake: null == keepScreenAwake ? _self.keepScreenAwake : keepScreenAwake // ignore: cast_nullable_to_non_nullable
+as bool,quickActionButtons: null == quickActionButtons ? _self._quickActionButtons : quickActionButtons // ignore: cast_nullable_to_non_nullable
+as List<String>,pinnedProjects: null == pinnedProjects ? _self._pinnedProjects : pinnedProjects // ignore: cast_nullable_to_non_nullable
+as List<String>,voiceRecognitionProvider: null == voiceRecognitionProvider ? _self.voiceRecognitionProvider : voiceRecognitionProvider // ignore: cast_nullable_to_non_nullable
+as String,tencentAsrAppId: null == tencentAsrAppId ? _self.tencentAsrAppId : tencentAsrAppId // ignore: cast_nullable_to_non_nullable
+as String,tencentAsrSecretId: null == tencentAsrSecretId ? _self.tencentAsrSecretId : tencentAsrSecretId // ignore: cast_nullable_to_non_nullable
+as String,tencentAsrSecretKey: null == tencentAsrSecretKey ? _self.tencentAsrSecretKey : tencentAsrSecretKey // ignore: cast_nullable_to_non_nullable
+as String,tencentAsrToken: null == tencentAsrToken ? _self.tencentAsrToken : tencentAsrToken // ignore: cast_nullable_to_non_nullable
+as String,
   ));
 }
 
