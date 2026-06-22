@@ -19,7 +19,18 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   @override
   Future<AppSettings> build() async {
     _prefs = await SharedPreferences.getInstance();
-    return _load();
+    final settings = await _load();
+    // Dev bootstrap: seed a local profile so we skip onboarding during testing.
+    if (!settings.hasCompletedOnboarding && settings.profiles.isEmpty) {
+      await addProfile(const ServerProfile(
+        id: 'local',
+        name: 'Mac (local)',
+        url: 'http://127.0.0.1:8797',
+      ));
+      await completeOnboarding();
+      return _load();
+    }
+    return settings;
   }
 
   Future<AppSettings> _load() async {

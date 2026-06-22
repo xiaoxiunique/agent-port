@@ -75,6 +75,28 @@ class _InputBarState extends ConsumerState<InputBar> {
     } catch (_) {}
   }
 
+  static const _quickActions = ['继续', 'yes', 'no', 'LGTM', 'skip'];
+
+  Future<void> _sendQuick(String text) async {
+    setState(() => _sending = true);
+    try {
+      await ref.read(apiProvider).send(
+            SendRequest(
+              paneId: widget.pane.id,
+              text: text,
+              submitKey: _isCodex ? 'Tab' : 'Enter',
+            ),
+          );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('发送失败: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   Future<void> _pickAndUpload() async {
     try {
       final xfile =
@@ -116,15 +138,40 @@ class _InputBarState extends ConsumerState<InputBar> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return SafeArea(
       top: false,
       child: Material(
         elevation: 8,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
-          child: Row(
-            children: [
-              IconButton(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Quick action buttons row
+            SizedBox(
+              height: 36,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                children: _quickActions.map((label) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ActionChip(
+                      label: Text(label, style: const TextStyle(fontSize: 12)),
+                      visualDensity: VisualDensity.compact,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
+                      onPressed: () => _sendQuick(label),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            // Input row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 2, 8, 6),
+              child: Row(
+                children: [
+                  IconButton(
                 icon: Icon(widget.mode == RuntimeMode.terminal
                     ? Icons.description
                     : Icons.terminal),
@@ -175,8 +222,10 @@ class _InputBarState extends ConsumerState<InputBar> {
                       )
                     : const Icon(Icons.send),
               ),
-            ],
-          ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
