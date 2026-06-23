@@ -1,10 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../features/monitor/monitor_page.dart';
 import '../features/pane_detail/pane_detail_page.dart';
-import '../features/settings/settings_view.dart';
+import '../features/server/server_home_page.dart';
+import 'home_shell.dart';
 
 /// Shared navigator key so the [TrayService] can open the control-center
 /// window without holding a BuildContext.
@@ -22,16 +24,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const MonitorPage(),
+        // macOS is the server: its window is the control panel. Phone/web/other
+        // platforms are clients: the monitoring tab shell.
+        builder: (context, state) =>
+            Platform.isMacOS ? const ServerHomePage() : const HomeShell(),
       ),
       GoRoute(
         path: '/pane/:paneId',
         builder: (context, state) =>
             PaneDetailPage(paneId: state.pathParameters['paneId']!),
-      ),
-      GoRoute(
-        path: '/settings',
-        builder: (context, state) => const SettingsView(),
       ),
     ],
   );

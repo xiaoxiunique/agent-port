@@ -22,16 +22,16 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>LSUIElement</key>
+	<false/>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
-	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
-	<key>LSUIElement</key>
-	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Agent Port 使用麦克风进行语音输入,把语音转写为发送给 agent 的文本。</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Agent Port 使用语音识别把你的语音转写为文本输入。</string>
 </dict>

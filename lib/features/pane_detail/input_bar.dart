@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -46,7 +45,6 @@ class _InputBarState extends ConsumerState<InputBar> {
   final _voice = VoiceInputController();
   bool _sending = false;
   bool _goalMode = false;
-  bool _refineMode = false;
   bool _vimMode = false;
   bool _voiceMode = false;
 
@@ -87,21 +85,15 @@ class _InputBarState extends ConsumerState<InputBar> {
   Future<void> _send() async {
     final raw = _controller.text.trim();
     if (raw.isEmpty || _sending) return;
-    final refine = _refineMode;
+    HapticFeedback.lightImpact();
     final goal = _goalMode;
     setState(() {
       _sending = true;
       _goalMode = false;
-      _refineMode = false;
     });
     try {
       final api = ref.read(apiProvider);
-      var text = raw;
-      if (refine) {
-        final r = await api.refineText(text);
-        if (r.text != null && r.text!.isNotEmpty) text = r.text!;
-      }
-      final payload = goal ? _goalText(text) : text;
+      final payload = goal ? _goalText(raw) : raw;
       await api.send(SendRequest(
         paneId: widget.pane.id,
         text: payload,
@@ -111,10 +103,7 @@ class _InputBarState extends ConsumerState<InputBar> {
       _controller.clear();
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _goalMode = goal;
-          _refineMode = refine;
-        });
+        setState(() => _goalMode = goal);
         _snack('发送失败: $e');
       }
     } finally {
@@ -139,6 +128,7 @@ class _InputBarState extends ConsumerState<InputBar> {
   }
 
   Future<void> _sendKey(String key) async {
+    HapticFeedback.selectionClick();
     try {
       await ref.read(apiProvider).sendKey(widget.pane.id, key);
     } catch (e) {
@@ -270,44 +260,39 @@ class _InputBarState extends ConsumerState<InputBar> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Divider(height: 1, color: AgentPortTheme.separator(theme.brightness)),
-            // Accessory row
-            SizedBox(
-              height: 44,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                children: [
-                  _ProviderPill(
-                    appType: _ccAppType,
-                    future: _ccFuture,
-                    onSwitch: _switchProvider,
-                    onRefresh: () => setState(
-                        () => _ccFuture = ref.read(apiProvider).ccSwitchStatus()),
-                  ),
-                  const SizedBox(width: 6),
-                  _AccessoryButton(
-                    icon: Icons.flag_outlined,
-                    label: _goalMode ? 'Goal on' : 'Goal',
-                    selected: _goalMode,
-                    onTap: () => setState(() => _goalMode = !_goalMode),
-                  ),
-                  const SizedBox(width: 6),
-                  _AccessoryButton(
-                    icon: Icons.auto_fix_high,
-                    label: 'Refine',
-                    selected: _refineMode,
-                    onTap: () => setState(() => _refineMode = !_refineMode),
-                  ),
-                  const SizedBox(width: 6),
-                  _keysMenu(isClaude),
-                  const SizedBox(width: 6),
-                  _moreMenu(isClaude),
-                ],
+            // Accessory row (provider pill / Goal / Keys / More)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 5, 8, 3),
+              child: SizedBox(
+                height: 30,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    _ProviderPill(
+                      appType: _ccAppType,
+                      future: _ccFuture,
+                      onSwitch: _switchProvider,
+                      onRefresh: () => setState(() =>
+                          _ccFuture = ref.read(apiProvider).ccSwitchStatus()),
+                    ),
+                    const SizedBox(width: 6),
+                    _AccessoryButton(
+                      icon: Icons.adjust,
+                      label: _goalMode ? 'Goal on' : 'Goal',
+                      selected: _goalMode,
+                      onTap: () => setState(() => _goalMode = !_goalMode),
+                    ),
+                    const SizedBox(width: 6),
+                    _keysMenu(isClaude),
+                    const SizedBox(width: 6),
+                    _moreMenu(isClaude),
+                  ],
+                ),
               ),
             ),
             // Composer row
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 2, 8, 6),
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
               child: _voiceMode ? _voiceComposer(theme) : _textComposer(theme),
             ),
           ],
@@ -317,50 +302,52 @@ class _InputBarState extends ConsumerState<InputBar> {
   }
 
   Widget _textComposer(ThemeData theme) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.mic_none),
-          tooltip: '语音输入',
-          onPressed: () => setState(() => _voiceMode = true),
-        ),
-        Expanded(
-          child: TextField(
-            controller: _controller,
-            minLines: 1,
-            maxLines: _controller.text.length > 120 ? 10 : 4,
-            textInputAction: TextInputAction.newline,
-            decoration: InputDecoration(
-              hintText: '这里输入...',
-              filled: true,
-              fillColor: AgentPortTheme.softFill(theme.brightness),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide.none,
+    final b = theme.brightness;
+    final canSend = _controller.text.trim().isNotEmpty && !_sending;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 42),
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      decoration: BoxDecoration(
+        color: AgentPortTheme.elevatedSurface(b),
+        borderRadius: BorderRadius.circular(21),
+        border: Border.all(color: AgentPortTheme.separator(b)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _ComposerIcon(
+            icon: Icons.graphic_eq,
+            variant: _ComposerVariant.plain,
+            onTap: () => setState(() => _voiceMode = true),
+          ),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              minLines: 1,
+              maxLines: _controller.text.length > 120 ? 10 : 4,
+              textInputAction: TextInputAction.newline,
+              decoration: const InputDecoration(
+                hintText: '这里输入...',
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 9),
               ),
             ),
           ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.image_outlined),
-          tooltip: '上传图片',
-          onPressed: _pickAndUpload,
-        ),
-        IconButton.filled(
-          onPressed: _sending ? null : _send,
-          icon: _sending
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.arrow_upward),
-        ),
-      ],
+          _ComposerIcon(
+            icon: Icons.camera_alt_outlined,
+            variant: _ComposerVariant.plain,
+            onTap: _pickAndUpload,
+          ),
+          _ComposerIcon(
+            icon: Icons.arrow_upward,
+            variant: _ComposerVariant.filledCircle,
+            loading: _sending,
+            active: canSend,
+            onTap: canSend ? _send : null,
+          ),
+        ],
+      ),
     );
   }
 
@@ -409,69 +396,190 @@ class _InputBarState extends ConsumerState<InputBar> {
   }
 
   Widget _keysMenu(bool isClaude) {
-    return PopupMenuButton<String>(
-      tooltip: '控制键',
-      onSelected: _sendKey,
-      itemBuilder: (_) => [
-        const PopupMenuItem(value: 'C-[', child: Text('ESC')),
-        const PopupMenuItem(value: 'Enter', child: Text('Enter')),
-        const PopupMenuItem(value: 'Tab', child: Text('TAB')),
-        const PopupMenuItem(value: 'C-c', child: Text('C-c')),
-        const PopupMenuItem(value: 'C-d', child: Text('C-d')),
-        const PopupMenuItem(value: 'C-u', child: Text('C-u')),
-        const PopupMenuItem(value: 'Up', child: Text('↑')),
-        const PopupMenuItem(value: 'Down', child: Text('↓')),
-        const PopupMenuItem(value: 'BSpace', child: Text('⌫')),
-        if (isClaude) ...[
-          const PopupMenuDivider(),
-          const PopupMenuItem(value: 'VimBackspace', child: Text('vim ⌫')),
-          const PopupMenuItem(value: 'VimClear', child: Text('vim clr')),
+    return _AccessoryButton(
+      icon: Icons.keyboard_command_key,
+      label: 'Keys',
+      onTap: () => _openKeysSheet(isClaude),
+    );
+  }
+
+  static const _keyItems = [
+    ('ESC', 'C-['),
+    ('Enter', 'Enter'),
+    ('TAB', 'Tab'),
+    ('C-c', 'C-c'),
+    ('C-d', 'C-d'),
+    ('C-u', 'C-u'),
+    ('↑', 'Up'),
+    ('↓', 'Down'),
+    ('⌫', 'BSpace'),
+  ];
+
+  void _openKeysSheet(bool isClaude) {
+    _showSheet(
+      title: '控制键',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (label, key) in _keyItems)
+                _KeyChip(label: label, onTap: () => _sendKey(key)),
+            ],
+          ),
+          if (isClaude) ...[
+            const SizedBox(height: 16),
+            Text('Claude Vim',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _KeyChip(label: 'vim ⌫', onTap: () => _sendKey('VimBackspace')),
+                _KeyChip(label: 'vim clr', onTap: () => _sendKey('VimClear')),
+              ],
+            ),
+          ],
         ],
-      ],
-      child: const _AccessoryButton(icon: Icons.keyboard, label: 'Keys'),
+      ),
+    );
+  }
+
+  void _openMoreSheet(bool isClaude) {
+    _showSheet(
+      title: '更多',
+      padded: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SheetRow(
+            icon: widget.mode == RuntimeMode.terminal
+                ? Icons.description_outlined
+                : Icons.terminal,
+            label: widget.mode == RuntimeMode.terminal ? '打开日志' : '打开终端',
+            onTap: () {
+              Navigator.pop(context);
+              widget.onToggleMode();
+            },
+          ),
+          if (isClaude)
+            _SheetRow(
+              icon: Icons.edit_outlined,
+              label: _vimMode ? '关闭 Vim 模式' : '开启 Vim 模式',
+              trailing: _vimMode
+                  ? Icon(Icons.check, size: 18, color: Theme.of(context).colorScheme.primary)
+                  : null,
+              onTap: () {
+                Navigator.pop(context);
+                setState(() => _vimMode = !_vimMode);
+              },
+            ),
+          if (_quickReplies.isNotEmpty) ...[
+            const _SheetSectionLabel('快捷回复'),
+            for (final q in _quickReplies)
+              _SheetRow(
+                icon: Icons.reply,
+                label: q,
+                onTap: () {
+                  Navigator.pop(context);
+                  _sendPreset(q);
+                },
+              ),
+          ],
+          const Divider(height: 1),
+          _SheetRow(
+            icon: Icons.cancel_outlined,
+            label: '关闭 Pane',
+            destructive: true,
+            onTap: () {
+              Navigator.pop(context);
+              _kill();
+            },
+          ),
+        ],
+      ),
     );
   }
 
   Widget _moreMenu(bool isClaude) {
-    return PopupMenuButton<String>(
-      tooltip: '更多',
-      onSelected: (v) {
-        if (v == 'toggle') {
-          widget.onToggleMode();
-        } else if (v == 'vim') {
-          setState(() => _vimMode = !_vimMode);
-        } else if (v == 'kill') {
-          _kill();
-        } else if (v.startsWith('preset:')) {
-          _sendPreset(v.substring(7));
-        }
-      },
-      itemBuilder: (_) => [
-        PopupMenuItem(
-          value: 'toggle',
-          child: Text(
-              widget.mode == RuntimeMode.terminal ? '打开日志' : '打开终端'),
+    return _AccessoryButton(
+      icon: Icons.more_horiz,
+      label: 'More',
+      onTap: () => _openMoreSheet(isClaude),
+    );
+  }
+
+  /// Dark, rounded bottom sheet shared by the Keys / More popups (iOS-style).
+  void _showSheet({
+    required String title,
+    required Widget child,
+    bool padded = true,
+  }) {
+    final theme = Theme.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.7,
         ),
-        if (isClaude)
-          PopupMenuItem(
-            value: 'vim',
-            child: Text(_vimMode ? '关闭 Vim 模式' : '开启 Vim 模式'),
+        decoration: BoxDecoration(
+          color: AgentPortTheme.elevatedSurface(theme.brightness),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          border: Border.all(color: AgentPortTheme.separator(theme.brightness)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Grabber
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 8, bottom: 4),
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(title,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurfaceVariant)),
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: padded
+                      ? const EdgeInsets.fromLTRB(16, 4, 16, 16)
+                      : const EdgeInsets.only(bottom: 8),
+                  child: child,
+                ),
+              ),
+            ],
           ),
-        const PopupMenuDivider(),
-        for (final q in _quickReplies)
-          PopupMenuItem(value: 'preset:$q', child: Text(q)),
-        const PopupMenuDivider(),
-        const PopupMenuItem(
-          value: 'kill',
-          child: Text('关闭 Pane', style: TextStyle(color: Colors.red)),
         ),
-      ],
-      child: const _AccessoryButton(icon: Icons.more_horiz, label: 'More'),
+      ),
     );
   }
 }
 
-/// A small pill button in the accessory row (TerminalAccessoryLabel).
+/// Accessory-row pill (TerminalAccessoryLabel: rounded-rect r6, height 32,
+/// icon 12 / label 11 semibold; selected = accent fill, white text).
 class _AccessoryButton extends StatelessWidget {
   const _AccessoryButton({
     required this.icon,
@@ -489,32 +597,96 @@ class _AccessoryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final b = theme.brightness;
-    final fg = selected ? theme.colorScheme.primary : theme.colorScheme.onSurface;
+    final fg = selected
+        ? Colors.white
+        : theme.colorScheme.onSurface.withValues(alpha: 0.82);
+    final fill = selected
+        ? theme.colorScheme.primary
+        : (b == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.10)
+            : Colors.black.withValues(alpha: 0.05));
     return Material(
-      color: selected
-          ? theme.colorScheme.primary.withValues(alpha: 0.12)
-          : AgentPortTheme.softFill(b),
-      shape: StadiumBorder(
-        side: BorderSide(
-          color: selected
-              ? theme.colorScheme.primary.withValues(alpha: 0.4)
-              : Colors.transparent,
-        ),
-      ),
+      color: fill,
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        customBorder: const StadiumBorder(),
+        borderRadius: BorderRadius.circular(8),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Container(
+          height: 30,
+          constraints: const BoxConstraints(minWidth: 34),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AgentPortTheme.separator(b)),
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 15, color: fg),
+              Icon(icon, size: 13, color: fg),
               const SizedBox(width: 5),
-              Text(label, style: TextStyle(fontSize: 13, color: fg)),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+enum _ComposerVariant { plain, filledCircle }
+
+/// Circular composer button (ComposerIconLabel). `plain` has no background.
+class _ComposerIcon extends StatelessWidget {
+  const _ComposerIcon({
+    required this.icon,
+    required this.variant,
+    this.onTap,
+    this.loading = false,
+    this.active = true,
+  });
+
+  final IconData icon;
+  final _ComposerVariant variant;
+  final VoidCallback? onTap;
+  final bool loading;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final b = theme.brightness;
+    final filled = variant == _ComposerVariant.filledCircle;
+    final plain = variant == _ComposerVariant.plain;
+    final bg = filled
+        ? (active
+            ? theme.colorScheme.primary
+            : theme.colorScheme.primary.withValues(alpha: 0.35))
+        : (plain ? Colors.transparent : AgentPortTheme.softFill(b));
+    final fg = filled
+        ? Colors.white
+        : theme.colorScheme.onSurface.withValues(alpha: plain ? 0.6 : 0.82);
+    return InkResponse(
+      onTap: onTap,
+      radius: 22,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: bg,
+          shape: BoxShape.circle,
+          border: (filled || plain)
+              ? null
+              : Border.all(
+                  color: AgentPortTheme.separator(b).withValues(alpha: 0.82)),
+        ),
+        child: loading
+            ? Padding(
+                padding: const EdgeInsets.all(9),
+                child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+              )
+            : Icon(icon, size: filled ? 18 : 19, color: fg),
       ),
     );
   }
@@ -590,37 +762,152 @@ class _ProviderPill extends StatelessWidget {
                 ),
               ),
           ],
-          child: Material(
-            color: AgentPortTheme.softFill(b),
-            shape: const StadiumBorder(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.hub_outlined, size: 16),
-                  const SizedBox(width: 6),
-                  Column(
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 88, maxWidth: 150),
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            decoration: BoxDecoration(
+              color: b == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.13)
+                  : Colors.black.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AgentPortTheme.separator(b)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.hub, size: 14, color: theme.colorScheme.onSurface),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(appType,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 9,
+                              height: 1.1,
+                              fontWeight: FontWeight.w600,
                               color: theme.colorScheme.onSurfaceVariant)),
                       Text(providerName,
-                          style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w600)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12,
+                              height: 1.1,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.84))),
                     ],
                   ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.unfold_more, size: 14),
-                ],
-              ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.unfold_more,
+                    size: 12, color: theme.colorScheme.onSurfaceVariant),
+              ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// A tappable control-key chip inside the Keys sheet.
+class _KeyChip extends StatelessWidget {
+  const _KeyChip({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final b = theme.brightness;
+    return Material(
+      color: b == Brightness.dark
+          ? Colors.white.withValues(alpha: 0.10)
+          : Colors.black.withValues(alpha: 0.05),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 56),
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AgentPortTheme.separator(b)),
+          ),
+          child: Center(
+            widthFactor: 1,
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w600)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A row inside the More sheet.
+class _SheetRow extends StatelessWidget {
+  const _SheetRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.trailing,
+    this.destructive = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Widget? trailing;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = destructive ? Colors.red : theme.colorScheme.onSurface;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(fontSize: 15, color: color)),
+            ),
+            ?trailing,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A small grouped-section label inside a sheet.
+class _SheetSectionLabel extends StatelessWidget {
+  const _SheetSectionLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Text(text,
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurfaceVariant)),
     );
   }
 }

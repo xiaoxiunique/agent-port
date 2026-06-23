@@ -359,6 +359,13 @@ async fn main() {
         )
         .route("/api/cc-switch", get(api_cc_switch_status))
         .route("/api/cc-switch/switch", post(api_cc_switch_switch))
+        .route("/api/apps", get(api_apps))
+        .route("/api/apps/installed", get(api_apps_installed))
+        .route("/api/apps/open", post(api_apps_open))
+        .route("/api/apps/icon", get(api_apps_icon))
+        .route("/api/apps/quit", post(api_apps_quit))
+        .route("/api/apps/screenshot", get(api_app_screenshot))
+        .route("/api/screen", get(api_screen))
         .route("/ws", get(snapshot_ws))
         .route("/pane-log/ws", get(pane_log_ws))
         .route("/terminal/ws", get(terminal_ws))
@@ -2099,6 +2106,322 @@ fn parse_vm_stat_pages(line: &str) -> Option<f64> {
         .ok()
 }
 
+/// A running foreground GUI application on the host Mac.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RunningApp {
+    name: String,
+    path: String,
+    pid: u32,
+    memory_bytes: u64,
+    cpu_percent: f64,
+}
+
+/// Enumerate foreground GUI apps by scanning `ps` for executables living in a
+/// top-level `*.app/Contents/MacOS/` (helper/XPC bundles are nested under
+/// `.../Contents/...` and are filtered out). Memory = main-process RSS.
+fn collect_running_apps() -> Vec<RunningApp> {
+    let Some(out) = command_stdout("ps", &["-axo", "pid=,rss=,pcpu=,args="]) else {
+        return Vec::new();
+    };
+    let mut by_path: HashMap<String, RunningApp> = HashMap::new();
+    let user_apps = env::var("HOME")
+        .ok()
+        .filter(|h| !h.is_empty())
+        .map(|h| format!("{h}/Applications/"));
+    for line in out.lines() {
+        let line = line.trim_start();
+        let mut fields = line.split_whitespace();
+        let (Some(pid), Some(rss), Some(pcpu)) =
+            (fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        let args: String = fields.collect::<Vec<_>>().join(" ");
+        let Some(idx) = args.find(".app/Contents/MacOS/") else {
+            continue;
+        };
+        let bundle_path = &args[..idx + 4]; // include ".app"
+        // Nested helper/framework/XPC bundles contain "/Contents/" inside the
+        // bundle path — keep only top-level apps.
+        if bundle_path.contains("/Contents/") {
+            continue;
+        }
+        // Only user-facing apps (those in an Applications folder, i.e. shown in
+        // the Dock). Excludes /System/Library/CoreServices system agents like
+        // Notification Center / Control Center / Spotlight.
+        let is_dock_app = bundle_path.starts_with("/Applications/")
+            || bundle_path.starts_with("/System/Applications/")
+            || user_apps
+                .as_ref()
+                .is_some_and(|prefix| bundle_path.starts_with(prefix));
+        if !is_dock_app {
+            continue;
+        }
+        let name = bundle_path
+            .rsplit('/')
+            .next()
+            .unwrap_or(bundle_path)
+            .trim_end_matches(".app")
+            .to_string();
+        let pid = pid.parse::<u32>().unwrap_or(0);
+        let mem = rss.parse::<u64>().unwrap_or(0) * 1024; // rss is KB
+        let cpu = pcpu.parse::<f64>().unwrap_or(0.0);
+
+        by_path
+            .entry(bundle_path.to_string())
+            .and_modify(|app| {
+                app.memory_bytes += mem;
+                if cpu > app.cpu_percent {
+                    app.cpu_percent = cpu;
+                }
+            })
+            .or_insert(RunningApp {
+                name,
+                path: bundle_path.to_string(),
+                pid,
+                memory_bytes: mem,
+                cpu_percent: cpu,
+            });
+    }
+    let mut apps: Vec<RunningApp> = by_path.into_values().collect();
+    apps.sort_by(|a, b| b.memory_bytes.cmp(&a.memory_bytes));
+    apps
+}
+
+/// An installed `.app` bundle on disk.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct InstalledApp {
+    name: String,
+    path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAppRequest {
+    path: Option<String>,
+}
+
+/// Scan the standard Applications folders for installed `.app` bundles (one
+/// level deep, e.g. /Applications/Utilities).
+fn collect_installed_apps() -> Vec<InstalledApp> {
+    let mut dirs = vec![
+        "/Applications".to_string(),
+        "/System/Applications".to_string(),
+    ];
+    if let Ok(home) = env::var("HOME") {
+        if !home.is_empty() {
+            dirs.push(format!("{home}/Applications"));
+        }
+    }
+    let mut apps: Vec<InstalledApp> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for dir in dirs {
+        scan_apps_dir(&dir, true, &mut apps, &mut seen);
+    }
+    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps
+}
+
+fn scan_apps_dir(
+    dir: &str,
+    recurse: bool,
+    apps: &mut Vec<InstalledApp>,
+    seen: &mut std::collections::HashSet<String>,
+) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if file_name.ends_with(".app") && !file_name.starts_with('.') {
+            let path_str = path.to_string_lossy().into_owned();
+            if seen.insert(path_str.clone()) {
+                apps.push(InstalledApp {
+                    name: file_name.trim_end_matches(".app").to_string(),
+                    path: path_str,
+                });
+            }
+        } else if recurse && path.is_dir() && !file_name.starts_with('.') {
+            scan_apps_dir(&path.to_string_lossy(), false, apps, seen);
+        }
+    }
+}
+
+static APP_ICON_CACHE: LazyLock<Mutex<HashMap<String, Vec<u8>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static APP_ICON_TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Render an app bundle's icon to a 128px PNG (cached by bundle path). Returns
+/// None for apps whose icon lives in an asset catalog (no `.icns`).
+fn app_icon_png(bundle_path: &str) -> Option<Vec<u8>> {
+    if let Some(cached) = APP_ICON_CACHE.lock().unwrap().get(bundle_path) {
+        return Some(cached.clone());
+    }
+    let resources = format!("{bundle_path}/Contents/Resources");
+    let info_plist = format!("{bundle_path}/Contents/Info.plist");
+    let mut icns: Option<String> = command_stdout(
+        "/usr/libexec/PlistBuddy",
+        &["-c", "Print :CFBundleIconFile", &info_plist],
+    )
+    .and_then(clean_command_output)
+    .map(|name| {
+        let name = name.trim();
+        if name.ends_with(".icns") {
+            format!("{resources}/{name}")
+        } else {
+            format!("{resources}/{name}.icns")
+        }
+    })
+    .filter(|p| Path::new(p).exists());
+    if icns.is_none() {
+        if let Ok(entries) = fs::read_dir(&resources) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|e| e.to_str()) == Some("icns") {
+                    icns = Some(p.to_string_lossy().into_owned());
+                    break;
+                }
+            }
+        }
+    }
+    let icns = icns?;
+    let id = APP_ICON_TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let out = std::env::temp_dir().join(format!("agentport-icon-{id}.png"));
+    let out_str = out.to_string_lossy().into_owned();
+    let status = Command::new("sips")
+        .args(["-s", "format", "png", "-Z", "128", &icns, "--out", &out_str])
+        .output()
+        .ok()?;
+    if !status.status.success() {
+        return None;
+    }
+    let bytes = fs::read(&out).ok()?;
+    let _ = fs::remove_file(&out);
+    APP_ICON_CACHE
+        .lock()
+        .unwrap()
+        .insert(bundle_path.to_string(), bytes.clone());
+    Some(bytes)
+}
+
+#[derive(Debug, Deserialize)]
+struct QuitAppRequest {
+    name: Option<String>,
+}
+
+static SCREEN_TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Capture the main display to a downscaled JPEG (requires Screen Recording
+/// permission for the host process).
+fn capture_screen() -> Option<Vec<u8>> {
+    let id = SCREEN_TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let out = std::env::temp_dir().join(format!("agentport-screen-{id}.jpg"));
+    let out_str = out.to_string_lossy().into_owned();
+    // -x: silent, -t jpg, -D 1: main display.
+    let cap = Command::new("/usr/sbin/screencapture")
+        .args(["-x", "-t", "jpg", "-D", "1", &out_str])
+        .output()
+        .ok()?;
+    if !cap.status.success() {
+        let _ = fs::remove_file(&out);
+        return None;
+    }
+    // Downscale to fit 1600px (sips edits in place).
+    let _ = Command::new("sips").args(["-Z", "1600", &out_str]).output();
+    let bytes = fs::read(&out).ok()?;
+    let _ = fs::remove_file(&out);
+    if bytes.is_empty() {
+        return None;
+    }
+    Some(bytes)
+}
+
+/// Find the frontmost normal (layer-0) on-screen window owned by `pid` and
+/// return its CGWindowID. CGWindowList is front-to-back ordered, so the first
+/// match is the app's frontmost window. Requires Screen Recording permission.
+#[cfg(target_os = "macos")]
+fn app_main_window_id(pid: u32) -> Option<u32> {
+    use core_foundation::array::CFArray;
+    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use core_graphics::window::{
+        copy_window_info, kCGNullWindowID, kCGWindowListExcludeDesktopElements,
+        kCGWindowListOptionOnScreenOnly,
+    };
+
+    let raw = copy_window_info(
+        kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
+        kCGNullWindowID,
+    )?;
+    let windows: CFArray<CFDictionary<CFString, CFType>> =
+        unsafe { CFArray::wrap_under_get_rule(raw.as_concrete_TypeRef()) };
+
+    let pid_key = CFString::from_static_string("kCGWindowOwnerPID");
+    let num_key = CFString::from_static_string("kCGWindowNumber");
+    let layer_key = CFString::from_static_string("kCGWindowLayer");
+
+    for w in windows.iter() {
+        let owner = w
+            .find(&pid_key)
+            .and_then(|v| v.downcast::<CFNumber>())
+            .and_then(|n| n.to_i64());
+        if owner != Some(pid as i64) {
+            continue;
+        }
+        let layer = w
+            .find(&layer_key)
+            .and_then(|v| v.downcast::<CFNumber>())
+            .and_then(|n| n.to_i64())
+            .unwrap_or(0);
+        if layer != 0 {
+            continue;
+        }
+        if let Some(num) = w
+            .find(&num_key)
+            .and_then(|v| v.downcast::<CFNumber>())
+            .and_then(|n| n.to_i64())
+        {
+            return Some(num as u32);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
+fn app_main_window_id(_pid: u32) -> Option<u32> {
+    None
+}
+
+/// Capture a specific app's main window to a downscaled JPEG (occlusion-proof
+/// via `screencapture -l<windowid>`).
+fn capture_app_window(pid: u32) -> Option<Vec<u8>> {
+    let wid = app_main_window_id(pid)?;
+    let id = SCREEN_TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let out = std::env::temp_dir().join(format!("agentport-win-{id}.jpg"));
+    let out_str = out.to_string_lossy().into_owned();
+    let cap = Command::new("/usr/sbin/screencapture")
+        .args(["-x", "-o", "-t", "jpg", "-l", &wid.to_string(), &out_str])
+        .output()
+        .ok()?;
+    if !cap.status.success() {
+        let _ = fs::remove_file(&out);
+        return None;
+    }
+    let _ = Command::new("sips").args(["-Z", "1400", &out_str]).output();
+    let bytes = fs::read(&out).ok()?;
+    let _ = fs::remove_file(&out);
+    if bytes.is_empty() {
+        return None;
+    }
+    Some(bytes)
+}
+
 fn command_stdout(command: &str, args: &[&str]) -> Option<String> {
     let output = Command::new(command).args(args).output().ok()?;
     if !output.status.success() {
@@ -2617,6 +2940,185 @@ async fn api_cc_switch_switch(
                 "apps": [],
                 "error": error.to_string(),
             }),
+        ),
+    }
+}
+
+async fn api_apps(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+
+    match tokio::task::spawn_blocking(collect_running_apps).await {
+        Ok(apps) => json_response(StatusCode::OK, json!({ "ok": true, "apps": apps })),
+        Err(error) => json_response(
+            StatusCode::OK,
+            json!({ "ok": false, "apps": [], "error": error.to_string() }),
+        ),
+    }
+}
+
+async fn api_apps_installed(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    match tokio::task::spawn_blocking(collect_installed_apps).await {
+        Ok(apps) => json_response(StatusCode::OK, json!({ "ok": true, "apps": apps })),
+        Err(error) => json_response(
+            StatusCode::OK,
+            json!({ "ok": false, "apps": [], "error": error.to_string() }),
+        ),
+    }
+}
+
+async fn api_apps_open(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+    Json(body): Json<OpenAppRequest>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let Some(path) = body
+        .path
+        .as_ref()
+        .map(|p| p.trim().to_string())
+        .filter(|p| p.ends_with(".app") && Path::new(p).exists())
+    else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "ok": false, "error": "valid .app path is required" }),
+        );
+    };
+    let result = tokio::task::spawn_blocking(move || {
+        Command::new("/usr/bin/open").arg(&path).output()
+    })
+    .await;
+    match result {
+        Ok(Ok(out)) if out.status.success() => {
+            json_response(StatusCode::OK, json!({ "ok": true }))
+        }
+        Ok(Ok(out)) => json_response(
+            StatusCode::OK,
+            json!({ "ok": false, "error": String::from_utf8_lossy(&out.stderr).trim() }),
+        ),
+        _ => json_response(StatusCode::OK, json!({ "ok": false, "error": "open failed" })),
+    }
+}
+
+async fn api_apps_icon(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let Some(path) = query.get("path").filter(|v| !v.is_empty()).cloned() else {
+        return json_response(StatusCode::BAD_REQUEST, json!({ "error": "path is required" }));
+    };
+    match tokio::task::spawn_blocking(move || app_icon_png(&path)).await {
+        Ok(Some(bytes)) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "image/png")
+            .header(header::CACHE_CONTROL, "max-age=86400")
+            .body(Body::from(bytes))
+            .expect("response builder"),
+        _ => json_response(StatusCode::NOT_FOUND, json!({ "error": "icon not found" })),
+    }
+}
+
+async fn api_apps_quit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+    Json(body): Json<QuitAppRequest>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let Some(name) = body
+        .name
+        .as_ref()
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+    else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "ok": false, "error": "name is required" }),
+        );
+    };
+    let script = format!("tell application \"{}\" to quit", name.replace('"', ""));
+    let result = tokio::task::spawn_blocking(move || {
+        Command::new("/usr/bin/osascript")
+            .args(["-e", &script])
+            .output()
+    })
+    .await;
+    match result {
+        Ok(Ok(out)) if out.status.success() => {
+            json_response(StatusCode::OK, json!({ "ok": true }))
+        }
+        Ok(Ok(out)) => json_response(
+            StatusCode::OK,
+            json!({ "ok": false, "error": String::from_utf8_lossy(&out.stderr).trim() }),
+        ),
+        _ => json_response(StatusCode::OK, json!({ "ok": false, "error": "quit failed" })),
+    }
+}
+
+async fn api_screen(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    match tokio::task::spawn_blocking(capture_screen).await {
+        Ok(Some(bytes)) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "image/jpeg")
+            .header(header::CACHE_CONTROL, "no-store")
+            .body(Body::from(bytes))
+            .expect("response builder"),
+        _ => json_response(
+            StatusCode::OK,
+            json!({ "ok": false, "error": "screen capture failed (check Screen Recording permission)" }),
+        ),
+    }
+}
+
+async fn api_app_screenshot(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let Some(pid) = query.get("pid").and_then(|v| v.parse::<u32>().ok()) else {
+        return json_response(StatusCode::BAD_REQUEST, json!({ "error": "pid is required" }));
+    };
+    match tokio::task::spawn_blocking(move || capture_app_window(pid)).await {
+        Ok(Some(bytes)) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "image/jpeg")
+            .header(header::CACHE_CONTROL, "no-store")
+            .body(Body::from(bytes))
+            .expect("response builder"),
+        _ => json_response(
+            StatusCode::OK,
+            json!({ "ok": false, "error": "no window for app (it may have no visible window)" }),
         ),
     }
 }

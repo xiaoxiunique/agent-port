@@ -72,23 +72,27 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
         ),
         body: foundPane == null
             ? const Center(child: Text('pane 不在当前快照'))
-            : _mode == RuntimeMode.terminal
-                ? TerminalPaneView(
-                    api: ref.read(apiProvider),
-                    paneId: widget.paneId,
-                  )
-                : _LogView(pane: foundPane),
-        bottomNavigationBar: foundPane == null
-            ? null
-            : InputBar(
-                pane: foundPane,
-                mode: _mode,
-                onToggleMode: () => setState(() {
-                  _mode = _mode == RuntimeMode.log
-                      ? RuntimeMode.terminal
-                      : RuntimeMode.log;
-                }),
-                onKilled: () => Navigator.of(context).maybePop(),
+            : Column(
+                children: [
+                  Expanded(
+                    child: _mode == RuntimeMode.terminal
+                        ? TerminalPaneView(
+                            api: ref.read(apiProvider),
+                            paneId: widget.paneId,
+                          )
+                        : _LogView(pane: foundPane),
+                  ),
+                  InputBar(
+                    pane: foundPane,
+                    mode: _mode,
+                    onToggleMode: () => setState(() {
+                      _mode = _mode == RuntimeMode.log
+                          ? RuntimeMode.terminal
+                          : RuntimeMode.log;
+                    }),
+                    onKilled: () => Navigator.of(context).maybePop(),
+                  ),
+                ],
               ),
       ),
     );

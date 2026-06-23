@@ -18,7 +18,7 @@ class HostService extends ChangeNotifier {
   String _lastMessage = '';
   String? _lanUrl;
 
-  static const _port = '8787';
+  static const _port = '8797';
 
   ServiceState get state => _state;
   bool get isReachable => _isReachable;

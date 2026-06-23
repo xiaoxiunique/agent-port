@@ -29,14 +29,22 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     _prefs = await SharedPreferences.getInstance();
     final settings = await _load();
     // Dev bootstrap: seed a local profile so we skip onboarding during testing.
+    // Persist + return directly — addProfile/completeOnboarding no-op here
+    // because `state` isn't set yet during build().
     if (!settings.hasCompletedOnboarding && settings.profiles.isEmpty) {
-      await addProfile(const ServerProfile(
-        id: 'local',
-        name: 'Mac (local)',
-        url: 'http://127.0.0.1:8797',
-      ));
-      await completeOnboarding();
-      return _load();
+      const seeded = AppSettings(
+        profiles: [
+          ServerProfile(
+            id: 'local',
+            name: 'Mac (local)',
+            url: 'http://127.0.0.1:8797',
+          ),
+        ],
+        activeProfileId: 'local',
+        hasCompletedOnboarding: true,
+      );
+      await _persist(seeded);
+      return seeded;
     }
     return settings;
   }

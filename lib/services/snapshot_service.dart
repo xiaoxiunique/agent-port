@@ -18,6 +18,9 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>> {
 
   @override
   AsyncValue<Snapshot> build() {
+    // Reset on every (re)build — the Notifier instance is reused when
+    // apiProvider changes, and onDispose sets _disposed = true.
+    _disposed = false;
     ref.watch(apiProvider); // rebuild when the active profile changes
     ref.onDispose(_dispose);
     _connect();

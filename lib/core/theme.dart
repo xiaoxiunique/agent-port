@@ -13,7 +13,6 @@ class AgentPortTheme {
   static const _darkSecondary = Color(0xFF1C1C1F); // surface / card
   static const _darkTertiary = Color(0xFF2B2B2E); // elevated surface
   static const _lightPrimary = Color(0xFFFFFFFF); // surface / card
-  static const _lightSecondary = Color(0xFFFAFAFC); // page background
   static const _lightTertiary = Color(0xFFF2F2F7); // elevated surface
 
   // iOS system accent (systemBlue), light/dark variants.
@@ -32,7 +31,9 @@ class AgentPortTheme {
       surface: isDark ? _darkSecondary : _lightPrimary,
       surfaceContainerHighest: isDark ? _darkTertiary : _lightTertiary,
     );
-    final pageBg = isDark ? _darkPrimary : _lightSecondary;
+    // Grouped grey page background so white cards/rows pop and every tab shares
+    // the same backdrop behind the floating (glass) tab bar.
+    final pageBg = isDark ? _darkPrimary : const Color(0xFFF2F2F7);
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,

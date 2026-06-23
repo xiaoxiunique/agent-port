@@ -51,13 +51,6 @@ class MonitorPage extends ConsumerWidget {
           onSelect: (id) =>
               ref.read(settingsProvider.notifier).setActive(id),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: '设置',
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
       ),
       body: snapAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -203,7 +196,7 @@ class _Body extends StatelessWidget {
     }
     final panes = sortedPanes(snapshot.panes);
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
       itemCount: panes.length + 1,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
@@ -236,7 +229,9 @@ class _PaneCard extends StatelessWidget {
             );
             return;
           }
-          context.push('/pane/${pane.id}');
+          // Pane ids contain '%' (e.g. "%14"); encode so go_router doesn't
+          // treat it as a percent-escape and corrupt the round-trip.
+          context.push('/pane/${Uri.encodeComponent(pane.id)}');
         },
         child: Ink(
           decoration: BoxDecoration(

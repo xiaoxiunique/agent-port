@@ -24,10 +24,10 @@ class _AgentPortAppState extends ConsumerState<AgentPortApp> {
       // Defer until after the first frame — the Flutter engine must be fully
       // ready before TrayManager talks to AppKit.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        TrayService.instance.init(
-          appNavigatorKey,
-          ref.read(hostServiceProvider),
-        );
+        final host = ref.read(hostServiceProvider);
+        TrayService.instance.init(appNavigatorKey, host);
+        // Host app supervises its own Rust service — start it on launch.
+        host.startService();
       });
     }
   }

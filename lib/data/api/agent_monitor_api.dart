@@ -6,6 +6,7 @@ import '../models/agent_event.dart';
 import '../models/api.dart';
 import '../models/cc_switch.dart';
 import '../models/project_history.dart';
+import '../models/running_app.dart';
 import '../models/snapshot.dart';
 
 /// Typed HTTP client for the Agent Monitor Rust service.
@@ -165,5 +166,58 @@ class AgentMonitorApi {
       data: CcSwitchSwitchRequest(appType: appType, providerId: providerId).toJson(),
     );
     return CcSwitchStatusResponse.fromJson(r.data!);
+  }
+
+  // --- Machine monitor (macOS host) ---
+
+  /// `GET /api/apps` — foreground GUI apps on the host Mac.
+  Future<AppsResponse> listApps() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/apps');
+    return AppsResponse.fromJson(r.data!);
+  }
+
+  /// `GET /api/apps/installed` — all installed `.app` bundles.
+  Future<InstalledAppsResponse> listInstalledApps() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/apps/installed');
+    return InstalledAppsResponse.fromJson(r.data!);
+  }
+
+  /// `POST /api/apps/open` — launch an installed app by bundle path.
+  Future<void> openApp(String path) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/api/apps/open',
+      data: {'path': path},
+    );
+  }
+
+  /// Absolute HTTP URL for an app's icon (`GET /api/apps/icon?path=`).
+  String appIconUrl(String path) {
+    final base = _dio.options.baseUrl;
+    final token = (_token != null && _token.isNotEmpty) ? "&token=$_token" : "";
+    return '$base/api/apps/icon?path=${Uri.encodeQueryComponent(path)}$token';
+  }
+
+  /// Absolute HTTP URL for a fresh screenshot of an app's main window
+  /// (`GET /api/apps/screenshot?pid=`).
+  String appScreenshotUrl(int pid, {int? bust}) {
+    final base = _dio.options.baseUrl;
+    final token = (_token != null && _token.isNotEmpty) ? "&token=$_token" : "";
+    return '$base/api/apps/screenshot?pid=$pid&t=${bust ?? 0}$token';
+  }
+
+  /// `POST /api/apps/quit` — gracefully quit an app by name.
+  Future<void> quitApp(String name) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/api/apps/quit',
+      data: {'name': name},
+    );
+  }
+
+  /// Absolute HTTP URL for an on-demand main-display screenshot
+  /// (`GET /api/screen`). [bust] forces a fresh capture (cache-busting).
+  String screenUrl({int? bust}) {
+    final base = _dio.options.baseUrl;
+    final token = (_token != null && _token.isNotEmpty) ? "&token=$_token" : "";
+    return '$base/api/screen?t=${bust ?? 0}$token';
   }
 }
