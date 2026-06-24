@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -180,6 +182,17 @@ class _ConnectionCard extends StatelessWidget {
                   onPressed: () => _copy(context, localUrl),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonalIcon(
+                onPressed: () {
+                  Process.run('open', [localUrl]);
+                },
+                icon: const Icon(Icons.open_in_browser, size: 18),
+                label: const Text('在浏览器打开客户端'),
+              ),
             ),
           ],
         ),

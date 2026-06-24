@@ -39,3 +39,15 @@ fi
 
 chmod +x "$DEST_DIR/$BIN"
 echo "Bundled $BIN → $DEST_DIR"
+
+# Bundle the Flutter web client next to the binary so the service can serve a
+# zero-install browser UI. Opportunistic: only if `flutter build web` has run.
+WEB_SRC="$SRCROOT/../build/web"
+if [ -d "$WEB_SRC" ]; then
+  rm -rf "$DEST_DIR/web"
+  cp -R "$WEB_SRC" "$DEST_DIR/web"
+  echo "Bundled web client → $DEST_DIR/web"
+else
+  echo "note: $WEB_SRC not found; skipping web client (run 'flutter build web' first to include it)"
+fi
+

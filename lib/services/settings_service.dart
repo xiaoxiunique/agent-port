@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,12 +33,16 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     // Persist + return directly — addProfile/completeOnboarding no-op here
     // because `state` isn't set yet during build().
     if (!settings.hasCompletedOnboarding && settings.profiles.isEmpty) {
-      const seeded = AppSettings(
+      // On web the client is served by the host service itself, so default to
+      // the page origin → it talks to the same machine with no manual setup.
+      // On native dev builds, seed the local service for testing.
+      final url = kIsWeb ? Uri.base.origin : 'http://127.0.0.1:8797';
+      final seeded = AppSettings(
         profiles: [
           ServerProfile(
             id: 'local',
-            name: 'Mac (local)',
-            url: 'http://127.0.0.1:8797',
+            name: kIsWeb ? '本机服务' : 'Mac (local)',
+            url: url,
           ),
         ],
         activeProfileId: 'local',

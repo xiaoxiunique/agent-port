@@ -30,6 +30,9 @@ DMG="build/AgentPort.dmg"
 ENTITLEMENTS="macos/Runner/Release.entitlements"
 SERVICE_BIN="Contents/Resources/agent-monitor-service"
 
+echo "==> flutter build web --release (bundled into the app as the browser client)"
+flutter build web --release
+
 echo "==> flutter build macos --release"
 BUNDLE_RUST_UNIVERSAL="${UNIVERSAL:-0}" flutter build macos --release
 

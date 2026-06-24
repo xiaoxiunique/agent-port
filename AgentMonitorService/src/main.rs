@@ -27,6 +27,7 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::{broadcast, mpsc};
+use tower_http::services::{ServeDir, ServeFile};
 
 const DEFAULT_PORT: u16 = 8787;
 const DEFAULT_HOST: &str = "0.0.0.0";
@@ -344,7 +345,7 @@ async fn main() {
 
     spawn_snapshot_loop(state.clone());
 
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/api/snapshot", get(api_snapshot))
         .route("/api/pane/context", get(api_pane_context))
         .route("/api/send", post(api_send))
@@ -368,8 +369,21 @@ async fn main() {
         .route("/api/screen", get(api_screen))
         .route("/ws", get(snapshot_ws))
         .route("/pane-log/ws", get(pane_log_ws))
-        .route("/terminal/ws", get(terminal_ws))
-        .with_state(state.clone());
+        .route("/terminal/ws", get(terminal_ws));
+
+    // Serve the bundled web client (zero-install browser UI) when configured.
+    // /api and /ws are registered routes and take precedence; everything else
+    // falls back to index.html for SPA client-side routing.
+    if let Some(web_dir) = env::var_os("AGENT_MONITOR_WEB_DIR")
+        .map(PathBuf::from)
+        .filter(|path| path.is_dir())
+    {
+        let index = web_dir.join("index.html");
+        app = app.fallback_service(ServeDir::new(&web_dir).fallback(ServeFile::new(index)));
+        println!("Web client served at / from {}", web_dir.display());
+    }
+
+    let app = app.with_state(state.clone());
 
     let bind_addr = format!("{host}:{port}");
     let listener = tokio::net::TcpListener::bind(&bind_addr)

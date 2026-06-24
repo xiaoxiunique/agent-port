@@ -51,6 +51,12 @@ class HostService extends ChangeNotifier {
       env['AGENT_MONITOR_HOST'] = '0.0.0.0';
       env['AGENT_MONITOR_PORT'] = _port;
       env.remove('AGENT_MONITOR_TOKEN');
+      // Serve the bundled web client (sibling of the binary) when present, so
+      // any browser can reach a zero-install client at the service URL.
+      final webDir = '${File(binary).parent.path}/web';
+      if (await Directory(webDir).exists()) {
+        env['AGENT_MONITOR_WEB_DIR'] = webDir;
+      }
 
       _process = await Process.start(binary, [], environment: env);
 
