@@ -44,3 +44,8 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 AgentMonitorService/target/
+
+# Secrets / local env (service reads .env for API keys & public URLs)
+.env
+.env.*
+!.env.example

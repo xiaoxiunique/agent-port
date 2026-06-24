@@ -420,6 +420,18 @@ fn tmux_program_path() -> &'static str {
 }
 
 fn resolve_tmux_program_path() -> String {
+    // Explicit override by program name *or* path, used verbatim and resolved
+    // via PATH (e.g. `psmux` / `pmux` on Windows, where the tmux-compatible
+    // multiplexer isn't named `tmux`). Unlike AGENT_MONITOR_TMUX_PATH below,
+    // this accepts a bare command name and does not require an existing file.
+    if let Some(bin) = env::var("AGENT_MONITOR_TMUX_BIN")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return bin;
+    }
+
     if let Some(path) = env::var_os("AGENT_MONITOR_TMUX_PATH")
         .map(PathBuf::from)
         .filter(|path| path.is_file())

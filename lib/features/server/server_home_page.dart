@@ -239,30 +239,46 @@ class _EnvironmentSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text('环境', style: theme.textTheme.labelLarge),
+        Text('开发工具', style: theme.textTheme.labelLarge),
+        const SizedBox(height: 4),
+        Text(
+          '在这台 Mac 上检测并一键安装 agent CLI(自动优先 Homebrew)',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
         ),
+        const SizedBox(height: 8),
+        Card(
+          child: Column(
+            children: [
+              for (final t in env.devTools)
+                _ToolRow(
+                  info: t,
+                  installing: env.installingTool == t.tool,
+                  busy: env.installingTool != null,
+                  onInstall: () =>
+                      ref.read(environmentServiceProvider).install(t.tool),
+                ),
+            ],
+          ),
+        ),
+        if (env.installingTool != null) ...[
+          const SizedBox(height: 8),
+          _InstallLog(lines: env.installLog),
+        ],
+        const SizedBox(height: 20),
+        Text('tmux 启动包装器(cc / cx)', style: theme.textTheme.labelLarge),
+        const SizedBox(height: 8),
         Card(
           child: Column(
             children: [
               ListTile(
                 dense: true,
-                leading: Icon(
-                  env.tmuxInstalled ? Icons.check_circle : Icons.error_outline,
-                  color: env.tmuxInstalled ? Colors.green : Colors.red,
-                  size: 20,
-                ),
-                title: const Text('tmux'),
-                subtitle: Text(env.tmuxVersion ?? '未安装'),
-              ),
-              ListTile(
-                dense: true,
+                leading: const SizedBox(width: 20),
                 title: const Text('cc'),
                 subtitle: Text(_stateLabel(env.ccState)),
               ),
               ListTile(
                 dense: true,
+                leading: const SizedBox(width: 20),
                 title: const Text('cx'),
                 subtitle: Text(_stateLabel(env.cxState)),
               ),
@@ -280,7 +296,7 @@ class _EnvironmentSection extends ConsumerWidget {
           ),
         if (env.lastMessage.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: 12),
             child: Text(env.lastMessage, style: theme.textTheme.bodySmall),
           ),
       ],
@@ -293,4 +309,87 @@ class _EnvironmentSection extends ConsumerWidget {
         CommandState.missing => '未安装',
         CommandState.conflict => '冲突(其他来源)',
       };
+}
+
+class _ToolRow extends StatelessWidget {
+  const _ToolRow({
+    required this.info,
+    required this.installing,
+    required this.busy,
+    required this.onInstall,
+  });
+
+  final ToolInfo info;
+  final bool installing;
+  final bool busy;
+  final VoidCallback onInstall;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (icon, color) = info.installed
+        ? (Icons.check_circle, Colors.green)
+        : info.blockedReason != null
+            ? (Icons.remove_circle_outline, theme.hintColor)
+            : (Icons.radio_button_unchecked, theme.hintColor);
+    final subtitle = info.installed
+        ? (info.version ?? '已安装')
+        : (info.blockedReason ?? '未安装');
+
+    Widget trailing;
+    if (installing) {
+      trailing = const SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    } else if (info.installed) {
+      trailing = const SizedBox.shrink();
+    } else {
+      trailing = TextButton(
+        onPressed: (busy || info.blockedReason != null) ? null : onInstall,
+        child: const Text('安装'),
+      );
+    }
+
+    return ListTile(
+      dense: true,
+      leading: Icon(icon, color: color, size: 20),
+      title: Text(EnvironmentService.toolLabel(info.tool)),
+      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: trailing,
+    );
+  }
+}
+
+/// Scrolling tail of the running installer's output.
+class _InstallLog extends StatelessWidget {
+  const _InstallLog({required this.lines});
+  final List<String> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    final tail = lines.length > 14 ? lines.sublist(lines.length - 14) : lines;
+    return Container(
+      width: double.infinity,
+      height: 180,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: SingleChildScrollView(
+        reverse: true,
+        child: Text(
+          tail.join('\n'),
+          style: const TextStyle(
+            color: Color(0xFFD4D4D4),
+            fontFamily: 'monospace',
+            fontSize: 11.5,
+            height: 1.35,
+          ),
+        ),
+      ),
+    );
+  }
 }
