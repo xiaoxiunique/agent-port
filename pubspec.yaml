@@ -40,6 +40,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # record 5.2.1 pins a stale record_linux (0.7.2) that doesn't implement the
 # resolved record_platform_interface 1.6.x — breaks the Dart kernel build on all
@@ -58,3 +59,19 @@ flutter:
     - assets/tray_icon.png
     - assets/claude-avatar.png
     - assets/codex-avatar.png
+
+# App icons for all platforms, generated from the single source PNG via
+# `dart run flutter_launcher_icons`. The source is full-bleed (no alpha).
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  macos:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    background_color: "#0E0E0E"
+    theme_color: "#FF6B4A"
