@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,7 +53,7 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
         appBar: AppBar(
           title: Text(title, overflow: TextOverflow.ellipsis),
           actions: [
-            if (foundPane != null && Platform.isIOS)
+            if (foundPane != null && !kIsWeb && Platform.isIOS)
               IconButton(
                 icon: const Icon(Icons.picture_in_picture),
                 tooltip: '画中画',

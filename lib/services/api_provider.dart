@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/api/agent_monitor_api.dart';
@@ -15,6 +16,10 @@ final apiProvider = Provider<AgentMonitorApi>((ref) {
       }
     }
   }
-  // Pre-onboarding / dev fallback: local LaunchAgent service on :8797.
-  return AgentMonitorApi(baseUrl: 'http://127.0.0.1:8797');
+  // Pre-onboarding / dev fallback. On web the client is served by the host
+  // itself, so default to the page origin (same-origin, no CORS); on native,
+  // the local service on :8797.
+  return AgentMonitorApi(
+    baseUrl: kIsWeb ? Uri.base.origin : 'http://127.0.0.1:8797',
+  );
 });

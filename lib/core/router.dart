@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,9 +26,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/',
         // macOS is the server: its window is the control panel. Phone/web/other
-        // platforms are clients: the monitoring tab shell.
-        builder: (context, state) =>
-            Platform.isMacOS ? const ServerHomePage() : const HomeShell(),
+        // platforms are clients: the monitoring tab shell. (kIsWeb first — the
+        // served web client must never touch dart:io Platform.)
+        builder: (context, state) => (!kIsWeb && Platform.isMacOS)
+            ? const ServerHomePage()
+            : const HomeShell(),
       ),
       GoRoute(
         path: '/pane/:paneId',

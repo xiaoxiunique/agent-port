@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -20,7 +21,7 @@ class _AgentPortAppState extends ConsumerState<AgentPortApp> {
   @override
   void initState() {
     super.initState();
-    if (Platform.isMacOS) {
+    if (!kIsWeb && Platform.isMacOS) {
       // Defer until after the first frame — the Flutter engine must be fully
       // ready before TrayManager talks to AppKit.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -35,7 +36,7 @@ class _AgentPortAppState extends ConsumerState<AgentPortApp> {
   @override
   Widget build(BuildContext context) {
     // Keep-screen-awake toggle (mobile only; no-op elsewhere).
-    if (Platform.isIOS || Platform.isAndroid) {
+    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
       final keepAwake =
           ref.watch(settingsProvider.select((s) => s.valueOrNull?.keepScreenAwake ?? false));
       WakelockPlus.toggle(enable: keepAwake);
