@@ -73,31 +73,14 @@ extension PaneStatusLabel on PaneStatus {
 
 /// Sort priority by status (MonitorView.swift:791-799):
 /// waiting → failed → running → done → idle.
-int _statusPriority(Pane p) {
-  switch (p.status.name) {
-    case 'waiting':
-      return 0;
-    case 'failed':
-      return 1;
-    case 'running':
-      return 2;
-    case 'done':
-      return 3;
-    default:
-      return 4; // idle
-  }
-}
-
-/// Sort panes the way the native list does (MonitorView.swift:765-789):
-/// status priority, then pinned, then project name, then `cc_` first, then
-/// recency.
+/// Sort panes in a **stable** order that does not jump when a session's live
+/// status changes — status is shown only as a colored dot, never as position.
+/// Order: pinned projects first (in pinned order), then project name, then
+/// Claude before Codex, then a stable session/pane id. Crucially it never keys
+/// on `updatedAt`, so ongoing activity alone never reshuffles the list.
 List<Pane> sortedPanes(List<Pane> panes, {List<String> pinned = const []}) {
   final list = [...panes];
   list.sort((a, b) {
-    final ap = _statusPriority(a);
-    final bp = _statusPriority(b);
-    if (ap != bp) return ap.compareTo(bp);
-
     final aProj = a.projectName;
     final bProj = b.projectName;
     final aPin = pinned.contains(aProj);
@@ -111,9 +94,10 @@ List<Pane> sortedPanes(List<Pane> panes, {List<String> pinned = const []}) {
     if (aProj != bProj) {
       return aProj.toLowerCase().compareTo(bProj.toLowerCase());
     }
-    if (a.isClaudePane && !b.isClaudePane) return -1;
-    if (!a.isClaudePane && b.isClaudePane) return 1;
-    return b.updatedAt.compareTo(a.updatedAt);
+    if (a.isClaudePane != b.isClaudePane) return a.isClaudePane ? -1 : 1;
+    final s = a.session.compareTo(b.session);
+    if (s != 0) return s;
+    return a.id.compareTo(b.id);
   });
   return list;
 }
