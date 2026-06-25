@@ -38,12 +38,16 @@ extension PaneDisplay on Pane {
     return session;
   }
 
-  /// True for Codex panes. Matches native `Pane.isCodexPane` (Pane.swift:102):
-  /// `cx_` prefix OR "codex" anywhere in session/command/title/tail.
+  /// True for Codex panes. The session prefix is **authoritative**: `cx_` is
+  /// Codex, and `cc_` is Claude Code that is NEVER treated as Codex even if the
+  /// word "codex" happens to appear in its terminal output. Only when neither
+  /// prefix is present do we fall back to the *stable* session/command text —
+  /// never the volatile title/tail, which would flicker the result frame to
+  /// frame as content scrolls.
   bool get isCodexPane {
+    if (session.startsWith('cc_')) return false;
     if (session.startsWith('cx_')) return true;
-    final haystack = '$session\n$command\n$title\n$tail'.toLowerCase();
-    return haystack.contains('codex');
+    return '$session\n$command'.toLowerCase().contains('codex');
   }
 
   /// Submit key for `/api/send` (Pane.swift:107): Tab for Codex, else Enter.
