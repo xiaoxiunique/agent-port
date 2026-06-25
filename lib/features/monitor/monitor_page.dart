@@ -58,7 +58,10 @@ class MonitorPage extends ConsumerWidget {
           message: '$e',
           onRetry: () => ref.invalidate(snapshotProvider),
         ),
-        data: (snap) => _Body(snapshot: snap),
+        data: (snap) => RefreshIndicator(
+          onRefresh: () => ref.read(snapshotProvider.notifier).refresh(),
+          child: _Body(snapshot: snap),
+        ),
       ),
     );
   }
@@ -192,10 +195,20 @@ class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (snapshot.panes.isEmpty) {
-      return const _EmptyState();
+      // Scrollable so pull-to-refresh works even with no sessions.
+      return LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: const _EmptyState(),
+          ),
+        ),
+      );
     }
     final panes = sortedPanes(snapshot.panes);
     return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
       itemCount: panes.length + 1,
       separatorBuilder: (_, _) => const SizedBox(height: 10),

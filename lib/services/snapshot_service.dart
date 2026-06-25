@@ -82,6 +82,11 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>> {
     }
   }
 
+  /// Force an immediate snapshot fetch (e.g. pull-to-refresh). Awaitable so the
+  /// caller can drive a [RefreshIndicator]; leaves the socket/poll machinery
+  /// untouched.
+  Future<void> refresh() => _pollOnce();
+
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(const Duration(seconds: 3), () {
