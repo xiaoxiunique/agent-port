@@ -32,8 +32,9 @@ class AgentPortTheme {
       surfaceContainerHighest: isDark ? _darkTertiary : _lightTertiary,
     );
     // Grouped grey page background so white cards/rows pop and every tab shares
-    // the same backdrop behind the floating (glass) tab bar.
-    final pageBg = isDark ? _darkPrimary : const Color(0xFFF2F2F7);
+    // the same backdrop behind the floating (glass) tab bar. Slightly deeper
+    // than systemGroupedBackground so the white cards read as clearly lifted.
+    final pageBg = isDark ? _darkPrimary : const Color(0xFFE8E8EE);
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
@@ -76,7 +77,7 @@ class AgentPortTheme {
   /// Card drop shadow (AgentMonitorTheme.cardShadow).
   static Color cardShadow(Brightness b) => b == Brightness.dark
       ? Colors.black.withValues(alpha: 0.18)
-      : Colors.black.withValues(alpha: 0.045);
+      : Colors.black.withValues(alpha: 0.10);
 
   /// Terminal palette — always dark, regardless of system theme
   /// (TerminalPaneView.swift:66-69).

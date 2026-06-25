@@ -253,8 +253,8 @@ class _PaneCard extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                 color: AgentPortTheme.cardShadow(b),
-                blurRadius: b == Brightness.dark ? 12 : 8,
-                offset: const Offset(0, 3),
+                blurRadius: b == Brightness.dark ? 12 : 16,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
