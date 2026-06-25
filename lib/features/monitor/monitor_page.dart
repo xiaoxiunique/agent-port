@@ -232,9 +232,9 @@ class _PaneCard extends StatelessWidget {
     final b = theme.brightness;
     return Material(
       color: AgentPortTheme.surface(b),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         onTap: () {
           if (pane.id.isEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -248,13 +248,15 @@ class _PaneCard extends StatelessWidget {
         },
         child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AgentPortTheme.separator(b)),
+            borderRadius: BorderRadius.circular(16),
+            border: b == Brightness.dark
+                ? Border.all(color: AgentPortTheme.separator(b))
+                : null,
             boxShadow: [
               BoxShadow(
                 color: AgentPortTheme.cardShadow(b),
-                blurRadius: b == Brightness.dark ? 12 : 16,
-                offset: const Offset(0, 4),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
               ),
             ],
           ),

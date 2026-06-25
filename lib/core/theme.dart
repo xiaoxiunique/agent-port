@@ -74,10 +74,11 @@ class AgentPortTheme {
       ? Colors.white.withValues(alpha: 0.08)
       : Colors.black.withValues(alpha: 0.055);
 
-  /// Card drop shadow (AgentMonitorTheme.cardShadow).
+  /// Card drop shadow — matches the settings `_Grouped` look (subtle in light,
+  /// none in dark where a hairline border defines the card instead).
   static Color cardShadow(Brightness b) => b == Brightness.dark
-      ? Colors.black.withValues(alpha: 0.18)
-      : Colors.black.withValues(alpha: 0.10);
+      ? Colors.black.withValues(alpha: 0.0)
+      : Colors.black.withValues(alpha: 0.05);
 
   /// Terminal palette — always dark, regardless of system theme
   /// (TerminalPaneView.swift:66-69).
