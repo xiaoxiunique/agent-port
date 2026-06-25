@@ -45,6 +45,10 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Agent Port 使用麦克风进行语音输入,把语音转写为发送给 agent 的文本。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

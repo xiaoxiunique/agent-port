@@ -58,13 +58,24 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
                 icon: const Icon(Icons.picture_in_picture),
                 tooltip: '画中画',
                 onPressed: () async {
-                  if (await PipService.isSupported) {
+                  final messenger = ScaffoldMessenger.of(context);
+                  if (!await PipService.isSupported) {
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('此设备不支持画中画')),
+                    );
+                    return;
+                  }
+                  try {
                     await PipService.start(
                       title: foundPane.command.isNotEmpty
                           ? foundPane.command
                           : foundPane.session,
                       status: foundPane.status.name,
                       body: foundPane.tail,
+                    );
+                  } catch (e) {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text('画中画启动失败: $e')),
                     );
                   }
                 },
