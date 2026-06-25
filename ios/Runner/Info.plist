@@ -49,5 +49,7 @@
 	<string>Agent Port 使用麦克风进行语音输入,把语音转写为发送给 agent 的文本。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Agent Port 使用语音识别把你的语音转写为文本输入。</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
