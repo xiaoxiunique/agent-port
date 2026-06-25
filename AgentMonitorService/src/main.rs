@@ -1594,9 +1594,7 @@ fn interaction_messages_for_pane(
     let cache_key = format!("{}:{}:{fingerprint}", pane.id, pane_status_key(status));
     let fallback = local_interaction_messages(pane, tail, status, reason, now);
 
-    if let Some(cached) = MESSAGE_CACHE
-        .lock()
-        .expect("message cache mutex poisoned")
+    if let Some(cached) = lock_recover(&MESSAGE_CACHE)
         .get(&cache_key)
         .cloned()
     {
@@ -1632,9 +1630,7 @@ fn spawn_deepseek_interpretation(
     }
 
     {
-        let mut pending = PENDING_INTERPRETATIONS
-            .lock()
-            .expect("pending interpretations mutex poisoned");
+        let mut pending = lock_recover(&PENDING_INTERPRETATIONS);
         if pending.contains_key(&cache_key) {
             return;
         }
@@ -1645,14 +1641,10 @@ fn spawn_deepseek_interpretation(
         let result =
             interpret_with_deepseek(&api_key, &pane, &tail, &status, &reason, &now, &fallback);
         if let Some(messages) = result.filter(|messages| !messages.is_empty()) {
-            MESSAGE_CACHE
-                .lock()
-                .expect("message cache mutex poisoned")
+            lock_recover(&MESSAGE_CACHE)
                 .insert(cache_key.clone(), messages);
         }
-        PENDING_INTERPRETATIONS
-            .lock()
-            .expect("pending interpretations mutex poisoned")
+        lock_recover(&PENDING_INTERPRETATIONS)
             .remove(&cache_key);
     });
 }
@@ -1900,7 +1892,7 @@ fn refine_text_with_deepseek(text: &str) -> serde_json::Value {
 
 fn track_pane_activity(pane_id: &str, tail: &str) -> bool {
     let hash = tail_hash(&activity_fingerprint(tail));
-    let mut activity = PANE_ACTIVITY.lock().expect("pane activity mutex poisoned");
+    let mut activity = lock_recover(&PANE_ACTIVITY);
     let now = Instant::now();
 
     match activity.get_mut(pane_id) {
@@ -2284,7 +2276,7 @@ static APP_ICON_TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 /// Render an app bundle's icon to a 128px PNG (cached by bundle path). Returns
 /// None for apps whose icon lives in an asset catalog (no `.icns`).
 fn app_icon_png(bundle_path: &str) -> Option<Vec<u8>> {
-    if let Some(cached) = APP_ICON_CACHE.lock().unwrap().get(bundle_path) {
+    if let Some(cached) = lock_recover(&APP_ICON_CACHE).get(bundle_path) {
         return Some(cached.clone());
     }
     let resources = format!("{bundle_path}/Contents/Resources");
@@ -2327,9 +2319,7 @@ fn app_icon_png(bundle_path: &str) -> Option<Vec<u8>> {
     }
     let bytes = fs::read(&out).ok()?;
     let _ = fs::remove_file(&out);
-    APP_ICON_CACHE
-        .lock()
-        .unwrap()
+    lock_recover(&APP_ICON_CACHE)
         .insert(bundle_path.to_string(), bytes.clone());
     Some(bytes)
 }
@@ -2448,6 +2438,14 @@ fn capture_app_window(pid: u32) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
+/// Lock a mutex, recovering the guard even if a previous holder panicked
+/// (poisoned). Without this, a single panic while holding a cache mutex
+/// poisons it and every later `.lock().expect(...)` panics in turn — resetting
+/// every incoming connection until the process restarts.
+fn lock_recover<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn command_stdout(command: &str, args: &[&str]) -> Option<String> {
     let output = Command::new(command).args(args).output().ok()?;
     if !output.status.success() {
@@ -2480,7 +2478,7 @@ fn request_pane_log_refresh(state: &AppState, pane_id: &str) {
 fn request_pane_log_refresh_burst(state: &AppState, pane_id: &str) {
     let burst_id = PANE_LOG_REFRESH_BURST_COUNTER.fetch_add(1, Ordering::Relaxed);
     {
-        let mut bursts = PANE_LOG_REFRESH_BURST_IDS.lock().unwrap();
+        let mut bursts = lock_recover(&PANE_LOG_REFRESH_BURST_IDS);
         bursts.insert(pane_id.to_string(), burst_id);
     }
 
@@ -2496,16 +2494,14 @@ fn request_pane_log_refresh_burst(state: &AppState, pane_id: &str) {
         let is_last_refresh = delay_ms == *PANE_LOG_REFRESH_BURST_DELAYS_MS.last().unwrap_or(&0);
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-            let is_current = PANE_LOG_REFRESH_BURST_IDS
-                .lock()
-                .unwrap()
+            let is_current = lock_recover(&PANE_LOG_REFRESH_BURST_IDS)
                 .get(&pane_id)
                 .copied()
                 == Some(burst_id);
             if is_current {
                 request_pane_log_refresh(&state, &pane_id);
                 if is_last_refresh {
-                    PANE_LOG_REFRESH_BURST_IDS.lock().unwrap().remove(&pane_id);
+                    lock_recover(&PANE_LOG_REFRESH_BURST_IDS).remove(&pane_id);
                 }
             }
         });
