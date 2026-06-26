@@ -2434,12 +2434,65 @@ fn pid_is_simulator(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
+/// The UDID of the first booted simulator device, if any.
+fn first_booted_simulator_udid() -> Option<String> {
+    let out = command_stdout("/usr/bin/xcrun", &["simctl", "list", "devices", "booted"])?;
+    for line in out.lines() {
+        if !line.contains("(Booted)") {
+            continue;
+        }
+        for seg in line.split('(') {
+            let candidate = seg.split(')').next().unwrap_or("").trim();
+            if candidate.len() == 36 && candidate.matches('-').count() == 4 {
+                return Some(candidate.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Capture the simulated iOS device's screen (the phone screen, without macOS
+/// chrome) as a downscaled JPEG. Returns None when no device is booted.
+fn capture_simulator_screen() -> Option<Vec<u8>> {
+    let udid = first_booted_simulator_udid()?;
+    let id = SCREEN_TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let png = std::env::temp_dir().join(format!("agentport-sim-{id}.png"));
+    let png_str = png.to_string_lossy().into_owned();
+    let cap = Command::new("/usr/bin/xcrun")
+        .args(["simctl", "io", &udid, "screenshot", &png_str])
+        .output()
+        .ok()?;
+    if !cap.status.success() {
+        let _ = fs::remove_file(&png);
+        return None;
+    }
+    // simctl writes PNG; convert + downscale to JPEG to match the response type.
+    let jpg = std::env::temp_dir().join(format!("agentport-sim-{id}.jpg"));
+    let jpg_str = jpg.to_string_lossy().into_owned();
+    let conv = Command::new("sips")
+        .args(["-s", "format", "jpeg", "-Z", "1400", &png_str, "--out", &jpg_str])
+        .output();
+    let _ = fs::remove_file(&png);
+    if !matches!(conv, Ok(ref o) if o.status.success()) {
+        let _ = fs::remove_file(&jpg);
+        return None;
+    }
+    let bytes = fs::read(&jpg).ok()?;
+    let _ = fs::remove_file(&jpg);
+    if bytes.is_empty() {
+        return None;
+    }
+    Some(bytes)
+}
+
 fn capture_app_window(pid: u32) -> Option<Vec<u8>> {
-    // The iOS Simulator is special-cased to a full-display capture — its content
-    // is what the user wants to see, and the window-capture path doesn't grab it
-    // the way a regular app window does.
+    // The iOS Simulator is special-cased: capture the simulated device's screen
+    // (the phone screen, via `simctl io <udid> screenshot`) rather than the
+    // macOS window chrome. Fall back to the window capture if no device booted.
     if pid_is_simulator(pid) {
-        return capture_screen();
+        if let Some(bytes) = capture_simulator_screen() {
+            return Some(bytes);
+        }
     }
     let wid = app_main_window_id(pid)?;
     let id = SCREEN_TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
