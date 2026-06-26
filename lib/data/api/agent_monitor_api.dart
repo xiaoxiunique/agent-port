@@ -8,6 +8,7 @@ import '../models/cc_switch.dart';
 import '../models/project_history.dart';
 import '../models/running_app.dart';
 import '../models/snapshot.dart';
+import '../models/token_usage.dart';
 
 /// Typed HTTP client for the Agent Monitor Rust service.
 ///
@@ -169,6 +170,12 @@ class AgentMonitorApi {
   }
 
   // --- Machine monitor (macOS host) ---
+
+  /// `GET /api/usage` — total Claude Code + Codex token usage (via ccusage).
+  Future<TokenUsage> usage() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/usage');
+    return TokenUsage.fromJson(r.data!);
+  }
 
   /// `GET /api/apps` — foreground GUI apps on the host Mac.
   Future<AppsResponse> listApps() async {

@@ -345,6 +345,17 @@ async fn main() {
 
     spawn_snapshot_loop(state.clone());
 
+    // Pre-warm + periodically refresh the token-usage cache so /api/usage is
+    // (almost) always an instant cache hit instead of a multi-second ccusage run.
+    tokio::spawn(async {
+        loop {
+            if let Ok(value) = tokio::task::spawn_blocking(compute_usage).await {
+                *lock_recover(&USAGE_CACHE) = Some((Instant::now(), value));
+            }
+            tokio::time::sleep(USAGE_TTL).await;
+        }
+    });
+
     let mut app = Router::new()
         .route("/api/snapshot", get(api_snapshot))
         .route("/api/pane/context", get(api_pane_context))
@@ -367,6 +378,7 @@ async fn main() {
         .route("/api/apps/quit", post(api_apps_quit))
         .route("/api/apps/screenshot", get(api_app_screenshot))
         .route("/api/screen", get(api_screen))
+        .route("/api/usage", get(api_usage))
         .route("/ws", get(snapshot_ws))
         .route("/pane-log/ws", get(pane_log_ws))
         .route("/terminal/ws", get(terminal_ws));
@@ -3195,6 +3207,73 @@ async fn api_screen(
             json!({ "ok": false, "error": "screen capture failed (check Screen Recording permission)" }),
         ),
     }
+}
+
+/// Cached total token usage (Claude Code + Codex), computed via `ccusage`.
+static USAGE_CACHE: LazyLock<Mutex<Option<(Instant, serde_json::Value)>>> =
+    LazyLock::new(|| Mutex::new(None));
+const USAGE_TTL: Duration = Duration::from_secs(300);
+
+/// Run `ccusage <subcmd> --json` (via a login shell so bun/PATH resolve) and
+/// extract the all-time totals. `subcmd` is e.g. "daily" (Claude Code) or
+/// "codex daily" (Codex).
+fn ccusage_totals(subcmd: &str) -> Option<serde_json::Value> {
+    let cmd = format!("bunx ccusage {subcmd} --json --offline");
+    let out = command_stdout("/bin/zsh", &["-lc", &cmd])?;
+    let v: serde_json::Value = serde_json::from_str(out.trim()).ok()?;
+    let t = v.get("totals")?;
+    // Codex variant uses `costUSD`; Claude uses `totalCost`.
+    let cost = t.get("totalCost").or_else(|| t.get("costUSD")).cloned();
+    Some(json!({
+        "totalTokens": t.get("totalTokens").cloned().unwrap_or(json!(0)),
+        "inputTokens": t.get("inputTokens").cloned().unwrap_or(json!(0)),
+        "outputTokens": t.get("outputTokens").cloned().unwrap_or(json!(0)),
+        "cost": cost.unwrap_or(json!(0)),
+    }))
+}
+
+fn compute_usage() -> serde_json::Value {
+    // Run both in parallel — each ccusage invocation parses a lot of logs.
+    let h_claude = thread::spawn(|| ccusage_totals("daily"));
+    let h_codex = thread::spawn(|| ccusage_totals("codex daily"));
+    let claude = h_claude.join().ok().flatten();
+    let codex = h_codex.join().ok().flatten();
+    json!({
+        "ok": claude.is_some() || codex.is_some(),
+        "claude": claude.unwrap_or(json!(null)),
+        "codex": codex.unwrap_or(json!(null)),
+    })
+}
+
+/// `GET /api/usage` — total Claude Code + Codex token usage (via ccusage),
+/// cached for a few minutes since parsing the session logs is expensive.
+async fn api_usage(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    {
+        let cache = lock_recover(&USAGE_CACHE);
+        if let Some((at, value)) = cache.as_ref() {
+            if at.elapsed() < USAGE_TTL {
+                return json_response(StatusCode::OK, value.clone());
+            }
+        }
+    }
+    let value = match tokio::task::spawn_blocking(compute_usage).await {
+        Ok(v) => v,
+        Err(error) => {
+            return json_response(
+                StatusCode::OK,
+                json!({ "ok": false, "error": error.to_string() }),
+            )
+        }
+    };
+    *lock_recover(&USAGE_CACHE) = Some((Instant::now(), value.clone()));
+    json_response(StatusCode::OK, value)
 }
 
 async fn api_app_screenshot(

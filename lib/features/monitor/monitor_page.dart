@@ -8,6 +8,8 @@ import '../../data/models/pane.dart';
 import '../../data/models/pane_ext.dart';
 import '../../data/models/server_profile.dart';
 import '../../data/models/snapshot.dart';
+import '../../data/models/token_usage.dart';
+import '../../services/api_provider.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
 import '../onboarding/onboarding_view.dart';
@@ -51,6 +53,7 @@ class MonitorPage extends ConsumerWidget {
           onSelect: (id) =>
               ref.read(settingsProvider.notifier).setActive(id),
         ),
+        actions: const [_UsageChip(), SizedBox(width: 6)],
       ),
       body: snapAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -59,7 +62,10 @@ class MonitorPage extends ConsumerWidget {
           onRetry: () => ref.invalidate(snapshotProvider),
         ),
         data: (snap) => RefreshIndicator(
-          onRefresh: () => ref.read(snapshotProvider.notifier).refresh(),
+          onRefresh: () {
+            ref.invalidate(usageProvider);
+            return ref.read(snapshotProvider.notifier).refresh();
+          },
           child: _Body(snapshot: snap),
         ),
       ),
@@ -408,4 +414,112 @@ String _timeOfDay(String iso) {
   final h = dt.hour.toString().padLeft(2, '0');
   final m = dt.minute.toString().padLeft(2, '0');
   return '$h:$m';
+}
+
+String _fmtTokens(int n) {
+  if (n >= 1000000000) return '${(n / 1e9).toStringAsFixed(1)}B';
+  if (n >= 1000000) return '${(n / 1e6).toStringAsFixed(1)}M';
+  if (n >= 1000) return '${(n / 1e3).toStringAsFixed(1)}K';
+  return '$n';
+}
+
+/// Compact top-right token-usage readout: Claude + Codex all-time totals.
+/// Tap for a per-agent breakdown.
+class _UsageChip extends ConsumerWidget {
+  const _UsageChip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final usage = ref.watch(usageProvider).valueOrNull;
+    if (usage == null || !usage.ok) return const SizedBox.shrink();
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _showUsageDetail(context, usage),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            _UsageRow(
+              asset: 'assets/claude-avatar.png',
+              tokens: usage.claude.totalTokens,
+            ),
+            const SizedBox(height: 3),
+            _UsageRow(
+              asset: 'assets/codex-avatar.png',
+              tokens: usage.codex.totalTokens,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UsageRow extends StatelessWidget {
+  const _UsageRow({required this.asset, required this.tokens});
+  final String asset;
+  final int tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: Image.asset(asset, width: 14, height: 14, fit: BoxFit.cover),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          _fmtTokens(tokens),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
+  }
+}
+
+void _showUsageDetail(BuildContext context, TokenUsage u) {
+  showDialog<void>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Token 用量(累计)'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _usageSection('Claude Code', u.claude),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Divider(height: 1),
+          ),
+          _usageSection('Codex', u.codex),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('关闭'),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _usageSection(String name, AgentUsage a) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 4),
+      Text('总计 ${_fmtTokens(a.totalTokens)}  ·  \$${a.cost.toStringAsFixed(2)}'),
+      Text(
+        '输入 ${_fmtTokens(a.inputTokens)} · 输出 ${_fmtTokens(a.outputTokens)}',
+        style: const TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+    ],
+  );
 }

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/api/agent_monitor_api.dart';
+import '../data/models/token_usage.dart';
 import 'settings_service.dart';
 
 /// The [AgentMonitorApi] for the active server profile. Watches settings, so
@@ -22,4 +23,10 @@ final apiProvider = Provider<AgentMonitorApi>((ref) {
   return AgentMonitorApi(
     baseUrl: kIsWeb ? Uri.base.origin : 'http://127.0.0.1:8797',
   );
+});
+
+/// Total Claude Code + Codex token usage (server-side ccusage, cached ~5 min).
+/// Refetched when the active profile changes.
+final usageProvider = FutureProvider.autoDispose<TokenUsage>((ref) async {
+  return ref.watch(apiProvider).usage();
 });
