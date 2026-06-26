@@ -2426,7 +2426,21 @@ fn app_main_window_id(_pid: u32) -> Option<u32> {
 
 /// Capture a specific app's main window to a downscaled JPEG (occlusion-proof
 /// via `screencapture -l<windowid>`).
+/// True if `pid` is the iOS Simulator. Its window doesn't capture usefully via
+/// the per-window path, so callers show the whole display instead.
+fn pid_is_simulator(pid: u32) -> bool {
+    command_stdout("ps", &["-p", &pid.to_string(), "-o", "comm="])
+        .map(|path| path.contains("/Simulator.app/"))
+        .unwrap_or(false)
+}
+
 fn capture_app_window(pid: u32) -> Option<Vec<u8>> {
+    // The iOS Simulator is special-cased to a full-display capture — its content
+    // is what the user wants to see, and the window-capture path doesn't grab it
+    // the way a regular app window does.
+    if pid_is_simulator(pid) {
+        return capture_screen();
+    }
     let wid = app_main_window_id(pid)?;
     let id = SCREEN_TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let out = std::env::temp_dir().join(format!("agentport-win-{id}.jpg"));
