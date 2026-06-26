@@ -2160,9 +2160,19 @@ fn collect_running_apps() -> Vec<RunningApp> {
             continue;
         };
         let bundle_path = &args[..idx + 4]; // include ".app"
-        // Nested helper/framework/XPC bundles contain "/Contents/" inside the
-        // bundle path — keep only top-level apps.
-        if bundle_path.contains("/Contents/") {
+        // Drop nested helper/framework/XPC bundles — but NOT real apps that ship
+        // inside another app (e.g. Simulator/Instruments under
+        // Xcode.app/Contents/Developer/Applications). Only skip when the bundle
+        // lives under a known helper subdirectory.
+        const HELPER_DIRS: &[&str] = &[
+            "/Contents/Frameworks/",
+            "/Contents/PlugIns/",
+            "/Contents/XPCServices/",
+            "/Contents/Library/",
+            "/Contents/Helpers/",
+            "/Contents/Resources/",
+        ];
+        if HELPER_DIRS.iter().any(|dir| bundle_path.contains(dir)) {
             continue;
         }
         // Only user-facing apps (those in an Applications folder, i.e. shown in
