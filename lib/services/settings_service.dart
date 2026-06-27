@@ -33,21 +33,29 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     // Persist + return directly — addProfile/completeOnboarding no-op here
     // because `state` isn't set yet during build().
     if (!settings.hasCompletedOnboarding && settings.profiles.isEmpty) {
-      // On web the client is served by the host service itself, so default to
-      // the page origin → it talks to the same machine with no manual setup.
-      // On native dev builds, seed the local service for testing.
-      final url = kIsWeb ? Uri.base.origin : 'http://127.0.0.1:8797';
-      final seeded = AppSettings(
-        profiles: [
-          ServerProfile(
-            id: 'local',
-            name: kIsWeb ? '本机服务' : 'Mac (local)',
-            url: url,
-          ),
-        ],
-        activeProfileId: 'local',
-        hasCompletedOnboarding: true,
-      );
+      final AppSettings seeded;
+      if (kIsWeb) {
+        // Web client is served by the host service → connect to the page origin.
+        seeded = AppSettings(
+          profiles: [
+            ServerProfile(id: 'local', name: '本机服务', url: Uri.base.origin),
+          ],
+          activeProfileId: 'local',
+          hasCompletedOnboarding: true,
+        );
+      } else {
+        // Native first launch: the Demo profile (offline sample data) is active
+        // so the app is populated immediately (App Store review + first run),
+        // with the local Mac service one tap away. 'demo' matches demoProfileUrl.
+        seeded = const AppSettings(
+          profiles: [
+            ServerProfile(id: 'demo', name: '演示 Demo', url: 'demo'),
+            ServerProfile(id: 'local', name: 'Mac (local)', url: 'http://127.0.0.1:8797'),
+          ],
+          activeProfileId: 'demo',
+          hasCompletedOnboarding: true,
+        );
+      }
       await _persist(seeded);
       return seeded;
     }

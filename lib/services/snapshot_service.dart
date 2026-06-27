@@ -6,6 +6,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../data/models/snapshot.dart';
 import 'api_provider.dart';
+import 'demo_data.dart';
 
 /// Live snapshot stream over `/ws`, falling back to HTTP polling when the
 /// socket drops, with periodic reconnection attempts. Mirrors the connection
@@ -21,8 +22,12 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>> {
     // Reset on every (re)build — the Notifier instance is reused when
     // apiProvider changes, and onDispose sets _disposed = true.
     _disposed = false;
-    ref.watch(apiProvider); // rebuild when the active profile changes
     ref.onDispose(_dispose);
+    // Demo mode: serve offline sample data, no socket/polling.
+    if (ref.watch(demoModeProvider)) {
+      return AsyncValue.data(demoSnapshot());
+    }
+    ref.watch(apiProvider); // rebuild when the active profile changes
     _connect();
     return const AsyncValue.loading();
   }

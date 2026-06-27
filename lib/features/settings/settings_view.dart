@@ -7,6 +7,7 @@ import '../../data/models/project_history.dart';
 import '../../data/models/running_app.dart';
 import '../../data/models/server_profile.dart';
 import '../../services/api_provider.dart';
+import '../../services/demo_data.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
 
@@ -174,15 +175,22 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
   Future<AppsResponse>? _apps;
   int _screenBust = 0; // 0 = not captured yet
 
+  Future<AppsResponse> _loadApps() {
+    if (ref.read(demoModeProvider)) {
+      return Future.value(AppsResponse(ok: true, apps: demoApps()));
+    }
+    return ref.read(apiProvider).listApps();
+  }
+
   @override
   void initState() {
     super.initState();
-    _apps = ref.read(apiProvider).listApps();
+    _apps = _loadApps();
   }
 
   void _reloadApps() {
     setState(() {
-      _apps = ref.read(apiProvider).listApps();
+      _apps = _loadApps();
     });
   }
 

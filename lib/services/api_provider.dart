@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/api/agent_monitor_api.dart';
 import '../data/models/token_usage.dart';
+import 'demo_data.dart';
 import 'settings_service.dart';
 
 /// The [AgentMonitorApi] for the active server profile. Watches settings, so
@@ -28,5 +29,6 @@ final apiProvider = Provider<AgentMonitorApi>((ref) {
 /// Total Claude Code + Codex token usage (server-side ccusage, cached ~5 min).
 /// Refetched when the active profile changes.
 final usageProvider = FutureProvider.autoDispose<TokenUsage>((ref) async {
+  if (ref.watch(demoModeProvider)) return demoUsage();
   return ref.watch(apiProvider).usage();
 });

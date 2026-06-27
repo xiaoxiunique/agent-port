@@ -9,6 +9,7 @@ import '../../data/models/cc_switch.dart';
 import '../../data/models/pane.dart';
 import '../../data/models/pane_ext.dart';
 import '../../services/api_provider.dart';
+import '../../services/demo_data.dart';
 import '../../services/settings_service.dart';
 import '../../services/tencent_asr_service.dart';
 import '../../services/voice_input_service.dart';
@@ -53,10 +54,14 @@ class _InputBarState extends ConsumerState<InputBar> {
   @override
   void initState() {
     super.initState();
-    _ccFuture = ref.read(apiProvider).ccSwitchStatus();
+    if (!ref.read(demoModeProvider)) {
+      _ccFuture = ref.read(apiProvider).ccSwitchStatus();
+    }
     _controller.addListener(() => setState(() {}));
     _voice.addListener(_onVoice);
   }
+
+  bool get _isDemo => ref.read(demoModeProvider);
 
   void _onVoice() {
     if (!mounted) return;
@@ -85,6 +90,10 @@ class _InputBarState extends ConsumerState<InputBar> {
   Future<void> _send() async {
     final raw = _controller.text.trim();
     if (raw.isEmpty || _sending) return;
+    if (_isDemo) {
+      _snack('演示模式:连接你自己的服务后即可发送');
+      return;
+    }
     HapticFeedback.lightImpact();
     final goal = _goalMode;
     setState(() {
@@ -112,6 +121,10 @@ class _InputBarState extends ConsumerState<InputBar> {
   }
 
   Future<void> _sendPreset(String text) async {
+    if (_isDemo) {
+      _snack('演示模式:仅供预览');
+      return;
+    }
     setState(() => _sending = true);
     try {
       await ref.read(apiProvider).send(SendRequest(
@@ -128,6 +141,10 @@ class _InputBarState extends ConsumerState<InputBar> {
   }
 
   Future<void> _sendKey(String key) async {
+    if (_isDemo) {
+      _snack('演示模式:仅供预览');
+      return;
+    }
     HapticFeedback.selectionClick();
     try {
       await ref.read(apiProvider).sendKey(widget.pane.id, key);
@@ -137,6 +154,10 @@ class _InputBarState extends ConsumerState<InputBar> {
   }
 
   Future<void> _switchProvider(String providerId) async {
+    if (_isDemo) {
+      _snack('演示模式:仅供预览');
+      return;
+    }
     try {
       await ref
           .read(apiProvider)
@@ -148,6 +169,10 @@ class _InputBarState extends ConsumerState<InputBar> {
   }
 
   Future<void> _kill() async {
+    if (_isDemo) {
+      _snack('演示模式:仅供预览');
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
@@ -198,6 +223,10 @@ class _InputBarState extends ConsumerState<InputBar> {
   }
 
   Future<void> _pickAndUpload() async {
+    if (_isDemo) {
+      _snack('演示模式:仅供预览');
+      return;
+    }
     try {
       final xfile = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (xfile == null) return;

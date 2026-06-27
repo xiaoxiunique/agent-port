@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../data/models/pane.dart';
 import '../../data/models/pane_ext.dart';
 import '../../services/api_provider.dart';
+import '../../services/demo_data.dart';
 import '../../services/pane_log_service.dart';
 import '../../services/pip_service.dart';
 import '../../services/snapshot_service.dart';
@@ -126,12 +127,16 @@ class _LogViewState extends ConsumerState<_LogView> {
   late PaneLogService _service;
   final _scroll = ScrollController();
   bool _autoFollow = true;
+  bool _demo = false;
 
   @override
   void initState() {
     super.initState();
-    _service = _make();
-    _service.addListener(_onLog);
+    _demo = ref.read(demoModeProvider);
+    if (!_demo) {
+      _service = _make();
+      _service.addListener(_onLog);
+    }
   }
 
   PaneLogService _make() => PaneLogService(
@@ -143,6 +148,7 @@ class _LogViewState extends ConsumerState<_LogView> {
   @override
   void didUpdateWidget(_LogView old) {
     super.didUpdateWidget(old);
+    if (_demo) return;
     if (old.pane.id != widget.pane.id) {
       _service.removeListener(_onLog);
       _service.dispose();
@@ -171,14 +177,37 @@ class _LogViewState extends ConsumerState<_LogView> {
 
   @override
   void dispose() {
-    _service.removeListener(_onLog);
-    _service.dispose();
+    if (!_demo) {
+      _service.removeListener(_onLog);
+      _service.dispose();
+    }
     _scroll.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_demo) {
+      return Column(
+        children: [
+          _StatusHeader(pane: widget.pane, state: PaneLogState.live),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: SelectableText(
+                widget.pane.tail.isEmpty ? '暂无运行输出' : widget.pane.tail,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  height: 1.3,
+                  color: AgentPortTheme.terminalForeground,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     final text = _service.text;
     return Column(
       children: [
