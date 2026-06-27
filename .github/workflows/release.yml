@@ -1,0 +1,132 @@
+name: Release
+
+# Tag-triggered packaging. Push a tag like `v1.0.0` to build and attach the
+# artifacts to that tag's GitHub Release. `workflow_dispatch` is also enabled so
+# you can dry-run the build (artifacts only, no release upload) without tagging.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  macos-app:
+    name: macOS app (.dmg, bundles Rust)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # Both arches so the Xcode build phase can emit a universal Rust binary
+      # (BUNDLE_RUST_UNIVERSAL=1) that runs on Apple Silicon and Intel Macs.
+      - name: Install Rust (arm64 + x86_64)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: AgentMonitorService
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.38.6
+          cache: true
+
+      - run: flutter pub get
+
+      # Build the web client first so the Xcode build phase bundles it next to
+      # the service binary (zero-install browser UI at the service URL).
+      - name: Build web client
+        run: flutter build web --release
+
+      # Triggers macos/scripts/bundle_rust_service.sh, which cargo-builds the
+      # service (universal) and copies it + web/ into the .app's Resources.
+      - name: Build macOS app
+        env:
+          BUNDLE_RUST_UNIVERSAL: "1"
+        run: flutter build macos --release
+
+      - name: Package .dmg and .zip
+        run: |
+          set -euo pipefail
+          APP="$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' | head -1)"
+          echo "App bundle: $APP"
+          # Fail loudly if the Rust service did not make it into the bundle.
+          test -x "$APP/Contents/Resources/agent-monitor-service" \
+            || { echo "::error::Rust service binary missing from app bundle"; exit 1; }
+          lipo -archs "$APP/Contents/Resources/agent-monitor-service" || true
+          mkdir -p dist
+          VER="${GITHUB_REF_NAME:-dev}"
+          hdiutil create -volname "AgentPort" -srcfolder "$APP" -ov -format UDZO \
+            "dist/AgentPort-${VER}-macos.dmg"
+          ditto -c -k --keepParent "$APP" "dist/AgentPort-${VER}-macos.zip"
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: dist/*
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ### macOS app
+            `AgentPort-*-macos.dmg` is **not code-signed / notarized**. On first
+            launch macOS Gatekeeper will block it — **right-click the app → Open**
+            (or run `xattr -dr com.apple.quarantine /Applications/agent_port.app`).
+            The Rust service (`agent-monitor-service`, universal arm64+x86_64) and
+            the web client are bundled inside the app — no extra install needed.
+
+  rust-binaries:
+    name: Rust service (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14,      target: aarch64-apple-darwin,     name: macos-arm64 }
+          - { os: macos-14,      target: x86_64-apple-darwin,      name: macos-x86_64 }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, name: linux-x86_64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: AgentMonitorService
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: >
+          cargo build --release
+          --manifest-path AgentMonitorService/Cargo.toml
+          --target ${{ matrix.target }}
+
+      - name: Stage binary
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "AgentMonitorService/target/${{ matrix.target }}/release/agent-monitor-service" \
+             "dist/agent-monitor-service-${{ matrix.name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-${{ matrix.name }}
+          path: dist/agent-monitor-service-${{ matrix.name }}
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/agent-monitor-service-${{ matrix.name }}
