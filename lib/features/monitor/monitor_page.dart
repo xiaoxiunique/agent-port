@@ -13,6 +13,7 @@ import '../../services/api_provider.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
 import '../onboarding/onboarding_view.dart';
+import '../settings/settings_view.dart' show ProjectHistoryPage;
 import 'agent_avatar.dart';
 
 class MonitorPage extends ConsumerWidget {
@@ -201,13 +202,23 @@ class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (snapshot.panes.isEmpty) {
-      // Scrollable so pull-to-refresh works even with no sessions.
+      // Scrollable so pull-to-refresh works even with no sessions. The add
+      // entry stays reachable so a fresh install can launch its first session.
       return LayoutBuilder(
         builder: (context, constraints) => SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: const _EmptyState(),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
+              child: Column(
+                children: const [
+                  _EmptyState(),
+                  SizedBox(height: 16),
+                  _AddProjectCard(),
+                ],
+              ),
+            ),
           ),
         ),
       );
@@ -216,12 +227,78 @@ class _Body extends StatelessWidget {
     return ListView.separated(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
-      itemCount: panes.length + 1,
+      itemCount: panes.length + 2,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
-        if (i == panes.length) return const _ProductFooter();
-        return _PaneCard(pane: panes[i]);
+        if (i < panes.length) return _PaneCard(pane: panes[i]);
+        if (i == panes.length) return const _AddProjectCard();
+        return const _ProductFooter();
       },
+    );
+  }
+}
+
+/// Last item of the home list: opens the recent-projects picker to launch a new
+/// Claude/Codex session, so adding doesn't require a trip to Settings.
+class _AddProjectCard extends StatelessWidget {
+  const _AddProjectCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ProjectHistoryPage()),
+        ),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: theme.colorScheme.primary.withValues(alpha: 0.40),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+            child: Row(
+              children: [
+                Icon(Icons.add_circle_outline,
+                    size: 24, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '添加项目',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '从历史项目启动 Claude / Codex',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right,
+                    size: 18, color: theme.colorScheme.outline),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

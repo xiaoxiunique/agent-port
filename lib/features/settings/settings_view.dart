@@ -101,13 +101,6 @@ class SettingsView extends ConsumerWidget {
               label: 'CC Switch',
               onTap: () => _push(context, const _CcSwitchPage()),
             ),
-            const _RowDivider(),
-            _Row(
-              icon: Icons.history,
-              tint: const Color(0xFF34C759),
-              label: '项目历史',
-              onTap: () => _push(context, const _ProjectHistoryPage()),
-            ),
           ]),
           const SizedBox(height: 24),
           _Grouped(children: [
@@ -1302,26 +1295,41 @@ class _CcSwitchPageState extends ConsumerState<_CcSwitchPage> {
 // Sub-page: Project history
 // ===========================================================================
 
-class _ProjectHistoryPage extends ConsumerStatefulWidget {
-  const _ProjectHistoryPage();
+/// Recent-projects picker: pick a past project and launch Claude/Codex on it.
+/// Reached from the home list's "添加项目" entry. Public so the monitor feature
+/// can reuse it.
+class ProjectHistoryPage extends ConsumerStatefulWidget {
+  const ProjectHistoryPage({super.key});
   @override
-  ConsumerState<_ProjectHistoryPage> createState() =>
-      _ProjectHistoryPageState();
+  ConsumerState<ProjectHistoryPage> createState() => _ProjectHistoryPageState();
 }
 
-class _ProjectHistoryPageState extends ConsumerState<_ProjectHistoryPage> {
+class _ProjectHistoryPageState extends ConsumerState<ProjectHistoryPage> {
   Future<ProjectHistoryResponse>? _future;
 
   @override
   void initState() {
     super.initState();
-    _future = ref.read(apiProvider).projectHistory();
+    _future = _load();
   }
 
-  void _reload() =>
-      setState(() => _future = ref.read(apiProvider).projectHistory());
+  Future<ProjectHistoryResponse> _load() {
+    if (ref.read(demoModeProvider)) {
+      return Future.value(
+          ProjectHistoryResponse(ok: true, projects: demoProjects()));
+    }
+    return ref.read(apiProvider).projectHistory();
+  }
+
+  void _reload() => setState(() => _future = _load());
 
   Future<void> _launch(String path, String agent) async {
+    if (ref.read(demoModeProvider)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('演示模式下无法启动项目')),
+      );
+      return;
+    }
     try {
       await ref.read(apiProvider).launchProject(path: path, agent: agent);
       _reload();

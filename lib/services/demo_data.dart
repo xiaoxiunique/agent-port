@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/enums.dart';
 import '../data/models/pane.dart';
+import '../data/models/project_history.dart';
 import '../data/models/running_app.dart';
 import '../data/models/snapshot.dart';
 import '../data/models/token_usage.dart';
@@ -167,5 +168,37 @@ List<RunningApp> demoApps() => const [
         pid: 504,
         memoryBytes: 268435456,
         cpuPercent: 2.2,
+      ),
+    ];
+
+/// Sample recent projects for Demo mode (项目历史 / 添加项目 picker).
+List<ProjectHistoryEntry> demoProjects() => const [
+      ProjectHistoryEntry(
+        path: '/Users/dev/projects/agent-port',
+        name: 'agent-port',
+        lastAgent: 'claude',
+        lastSeenAt: '2026-06-27T07:28:00',
+        launchCount: 12,
+      ),
+      ProjectHistoryEntry(
+        path: '/Users/dev/projects/payments-api',
+        name: 'payments-api',
+        lastAgent: 'codex',
+        lastSeenAt: '2026-06-27T07:29:00',
+        launchCount: 5,
+      ),
+      ProjectHistoryEntry(
+        path: '/Users/dev/projects/blog',
+        name: 'blog',
+        lastAgent: 'claude',
+        lastSeenAt: '2026-06-27T07:10:00',
+        launchCount: 3,
+      ),
+      ProjectHistoryEntry(
+        path: '/Users/dev/sites/scraper',
+        name: 'scraper',
+        lastAgent: 'claude',
+        lastSeenAt: '2026-06-26T22:50:00',
+        launchCount: 2,
       ),
     ];
