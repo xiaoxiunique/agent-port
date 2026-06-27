@@ -45,6 +45,20 @@ static PANE_LOG_REFRESH_BURST_IDS: LazyLock<Mutex<HashMap<String, u64>>> =
 static CC_SWITCH_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 static PROJECT_HISTORY_CACHE: LazyLock<Mutex<Option<Vec<ProjectHistoryEntry>>>> =
     LazyLock::new(|| Mutex::new(None));
+// Pending-message queue (Claude Code only): messages the user sent while the
+// agent was busy are held here, keyed by pane id, and flushed when the pane
+// goes Idle/Done. See `flush_pending_messages`.
+static PENDING_MESSAGES: LazyLock<Mutex<HashMap<String, Vec<PendingMessage>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+// Last status computed per pane by `build_snapshot`; read by `api_send` to
+// decide whether a Claude pane is currently busy (so it should queue).
+static PANE_STATUS_CACHE: LazyLock<Mutex<HashMap<String, PaneStatus>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+// Cooldown after a flush, so multi-queued messages are delivered one per idle
+// cycle (giving the agent time to start working) rather than dumped together.
+static PENDING_FLUSH_AT: LazyLock<Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static PENDING_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 static DEVICE_INFO_CACHE: LazyLock<Option<DeviceInfo>> =
     LazyLock::new(collect_device_info_uncached);
 static TMUX_PROGRAM_PATH: LazyLock<String> = LazyLock::new(resolve_tmux_program_path);
@@ -223,6 +237,38 @@ struct SendRequest {
     enter: Option<bool>,
     submit_key: Option<String>,
     vim_mode: Option<bool>,
+    /// When true, bypass the pending queue and send immediately even if the
+    /// Claude pane is busy.
+    force: Option<bool>,
+}
+
+/// One queued message awaiting an idle Claude pane. Serialized for `/api/pending`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PendingMessage {
+    id: String,
+    text: String,
+    created_at: String,
+    /// Whether to press the submit key (Enter) after pasting, on flush.
+    #[serde(skip)]
+    enter: bool,
+    #[serde(skip)]
+    vim_mode: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PendingUpdateRequest {
+    pane_id: String,
+    id: String,
+    text: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PendingDeleteRequest {
+    pane_id: String,
+    id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -360,6 +406,10 @@ async fn main() {
         .route("/api/snapshot", get(api_snapshot))
         .route("/api/pane/context", get(api_pane_context))
         .route("/api/send", post(api_send))
+        .route("/api/pending", get(api_pending_list))
+        .route("/api/pending/update", post(api_pending_update))
+        .route("/api/pending/delete", post(api_pending_delete))
+        .route("/api/pending/clear", post(api_pending_clear))
         .route("/api/refine-text", post(api_refine_text))
         .route("/api/upload-image", post(api_upload_image))
         .route("/api/key", post(api_key))
@@ -919,17 +969,26 @@ fn agent_launch_command(agent: &str) -> Result<String, String> {
         .unwrap_or_else(|| default_command.to_string()))
 }
 
-fn is_codex_pane(pane: &BasePane, tail: &str) -> bool {
-    let haystack = format!(
-        "{}\n{}\n{}\n{}",
-        pane.session, pane.command, pane.title, tail
-    )
-    .to_lowercase();
-
-    pane.session.starts_with("cx_")
-        || pane.command == "codex"
+fn is_codex_fields(session: &str, command: &str, title: &str, tail: &str) -> bool {
+    let haystack = format!("{session}\n{command}\n{title}\n{tail}").to_lowercase();
+    session.starts_with("cx_")
+        || command == "codex"
         || haystack.contains("codex")
         || haystack.contains("gpt-")
+}
+
+fn is_codex_pane(pane: &BasePane, tail: &str) -> bool {
+    is_codex_fields(&pane.session, &pane.command, &pane.title, tail)
+}
+
+/// Whether a pane is a Claude Code session (and not Codex). Field-based so it
+/// works for both `BasePane` (send) and the snapshot `Pane` (flush).
+fn is_claude_fields(session: &str, command: &str, title: &str, tail: &str) -> bool {
+    if is_codex_fields(session, command, title, tail) {
+        return false;
+    }
+    let haystack = format!("{session}\n{command}\n{title}").to_lowercase();
+    session.starts_with("cc_") || command == "claude" || haystack.contains("claude")
 }
 
 fn infer_status(pane: &BasePane, tail: &str, changed_recently: bool) -> (PaneStatus, String) {
@@ -1959,6 +2018,9 @@ fn build_snapshot() -> Snapshot {
             let tail = capture_pane(&pane.id);
             let changed_recently = track_pane_activity(&pane.id, &tail);
             let (status, reason) = infer_status(&pane, &tail, changed_recently);
+            if !pane.id.is_empty() {
+                lock_recover(&PANE_STATUS_CACHE).insert(pane.id.clone(), status.clone());
+            }
             let messages = interaction_messages_for_pane(&pane, &tail, &status, &reason, &now);
 
             Pane {
@@ -2553,11 +2615,88 @@ fn clean_command_output(output: String) -> Option<String> {
 
 fn broadcast_snapshot(state: &AppState) -> Snapshot {
     let snapshot = build_snapshot();
+    flush_pending_messages(state, &snapshot.panes);
     let _ = state.snapshots.send(json!({
         "type": "snapshot",
         "snapshot": snapshot,
     }));
     snapshot
+}
+
+/// Last status `build_snapshot` computed for a pane (≤ poll interval stale).
+fn cached_pane_status(pane_id: &str) -> Option<PaneStatus> {
+    lock_recover(&PANE_STATUS_CACHE).get(pane_id).cloned()
+}
+
+/// Append a message to a pane's pending queue; returns the new queue length.
+fn enqueue_pending(pane_id: &str, text: &str, enter: bool, vim_mode: bool) -> usize {
+    let id = format!(
+        "pm{}",
+        PENDING_ID_COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
+    let message = PendingMessage {
+        id,
+        text: text.to_string(),
+        created_at: now_iso(),
+        enter,
+        vim_mode,
+    };
+    let mut queues = lock_recover(&PENDING_MESSAGES);
+    let queue = queues.entry(pane_id.to_string()).or_default();
+    queue.push(message);
+    queue.len()
+}
+
+/// Deliver one queued message per idle Claude pane (FIFO), honoring a short
+/// post-flush cooldown so multi-queued messages become sequential turns.
+fn flush_pending_messages(state: &AppState, panes: &[Pane]) {
+    for pane in panes {
+        if pane.id.is_empty() {
+            continue;
+        }
+        // Only when the agent has finished its turn (per the chosen policy:
+        // Idle/Done, never while it's Running or Waiting for a y/n prompt).
+        if !matches!(pane.status, PaneStatus::Idle | PaneStatus::Done) {
+            continue;
+        }
+        if !is_claude_fields(&pane.session, &pane.command, &pane.title, &pane.tail) {
+            continue;
+        }
+        if let Some(at) = lock_recover(&PENDING_FLUSH_AT).get(&pane.id) {
+            if at.elapsed() < Duration::from_secs(4) {
+                continue;
+            }
+        }
+        let message = {
+            let mut queues = lock_recover(&PENDING_MESSAGES);
+            match queues.get_mut(&pane.id) {
+                Some(list) if !list.is_empty() => Some(list.remove(0)),
+                _ => None,
+            }
+        };
+        let Some(message) = message else {
+            continue;
+        };
+
+        exit_tmux_copy_mode(&pane.id);
+        if message.vim_mode {
+            let _ = send_key_parts(&pane.id, &["C-[", "i"]);
+        }
+        if let Err(error) = paste_text(&pane.id, &message.text) {
+            eprintln!("[pending] paste failed for {}: {error}; re-queued", pane.id);
+            lock_recover(&PENDING_MESSAGES)
+                .entry(pane.id.clone())
+                .or_default()
+                .insert(0, message);
+            continue;
+        }
+        if message.enter {
+            let _ = send_key_parts(&pane.id, &["Enter"]);
+        }
+        lock_recover(&PENDING_FLUSH_AT).insert(pane.id.clone(), Instant::now());
+        request_pane_log_refresh_burst(state, &pane.id);
+        eprintln!("[pending] delivered queued message to {}", pane.id);
+    }
 }
 
 fn request_pane_log_refresh(state: &AppState, pane_id: &str) {
@@ -2745,17 +2884,48 @@ async fn api_send(
         None => None,
     };
 
-    let submit_key = list_panes()
+    let target_pane = list_panes()
         .ok()
-        .and_then(|panes| panes.into_iter().find(|pane| pane.id == body.pane_id))
-        .and_then(|pane| {
-            if is_codex_pane(&pane, "") {
-                Some("Tab")
-            } else {
-                requested_submit_key
-            }
-        })
-        .or(requested_submit_key);
+        .and_then(|panes| panes.into_iter().find(|pane| pane.id == body.pane_id));
+    let is_codex = target_pane
+        .as_ref()
+        .map(|pane| is_codex_pane(pane, ""))
+        .unwrap_or(false);
+    let is_claude = target_pane
+        .as_ref()
+        .map(|pane| is_claude_fields(&pane.session, &pane.command, &pane.title, ""))
+        .unwrap_or(false);
+    let submit_key = if is_codex {
+        Some("Tab")
+    } else {
+        requested_submit_key
+    };
+
+    // Pending queue (Claude Code only): if the agent is currently busy, hold the
+    // message and let `flush_pending_messages` deliver it once the pane is idle.
+    // Codex already queues on its own, so it is never intercepted here.
+    if is_claude
+        && !body.force.unwrap_or(false)
+        && matches!(cached_pane_status(&body.pane_id), Some(PaneStatus::Running))
+    {
+        let count = enqueue_pending(
+            &body.pane_id,
+            &body.text,
+            submit_key.is_some(),
+            body.vim_mode.unwrap_or(false),
+        );
+        schedule_snapshot_refresh_soon(&state);
+        return json_response(
+            StatusCode::OK,
+            json!({
+                "ok": true,
+                "queued": true,
+                "paneId": body.pane_id,
+                "pendingCount": count,
+            }),
+        );
+    }
+
     let previous_tail = capture_pane_lines(&body.pane_id, PANE_COMMAND_TAIL_LINE_COUNT);
     exit_tmux_copy_mode(&body.pane_id);
 
@@ -2781,6 +2951,96 @@ async fn api_send(
         StatusCode::OK,
         pane_command_response_after_command(&state, &body.pane_id, previous_tail).await,
     )
+}
+
+fn pending_list_json(pane_id: &str) -> serde_json::Value {
+    let queues = lock_recover(&PENDING_MESSAGES);
+    let messages = queues.get(pane_id).cloned().unwrap_or_default();
+    json!({
+        "ok": true,
+        "paneId": pane_id,
+        "count": messages.len(),
+        "messages": messages,
+    })
+}
+
+async fn api_pending_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let Some(pane_id) = query.get("paneId").filter(|value| !value.is_empty()) else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "paneId is required" }),
+        );
+    };
+    json_response(StatusCode::OK, pending_list_json(pane_id))
+}
+
+async fn api_pending_update(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+    Json(body): Json<PendingUpdateRequest>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    if body.text.len() > 4000 {
+        return json_response(StatusCode::BAD_REQUEST, json!({ "error": "text is too long" }));
+    }
+    let found = {
+        let mut queues = lock_recover(&PENDING_MESSAGES);
+        queues
+            .get_mut(&body.pane_id)
+            .and_then(|list| list.iter_mut().find(|m| m.id == body.id))
+            .map(|m| m.text = body.text.clone())
+            .is_some()
+    };
+    if !found {
+        return json_response(StatusCode::NOT_FOUND, json!({ "error": "pending message not found" }));
+    }
+    json_response(StatusCode::OK, pending_list_json(&body.pane_id))
+}
+
+async fn api_pending_delete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+    Json(body): Json<PendingDeleteRequest>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    {
+        let mut queues = lock_recover(&PENDING_MESSAGES);
+        if let Some(list) = queues.get_mut(&body.pane_id) {
+            list.retain(|m| m.id != body.id);
+        }
+    }
+    json_response(StatusCode::OK, pending_list_json(&body.pane_id))
+}
+
+async fn api_pending_clear(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let Some(pane_id) = query.get("paneId").filter(|value| !value.is_empty()) else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "paneId is required" }),
+        );
+    };
+    lock_recover(&PENDING_MESSAGES).remove(pane_id);
+    json_response(StatusCode::OK, pending_list_json(pane_id))
 }
 
 async fn api_refine_text(

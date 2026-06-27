@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
 import '../../data/models/pane.dart';
 import '../../data/models/pane_ext.dart';
+import '../../data/models/pending.dart';
 import '../../services/api_provider.dart';
 import '../../services/demo_data.dart';
 import '../../services/pane_log_service.dart';
@@ -95,6 +96,7 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
                           )
                         : _LogView(pane: foundPane),
                   ),
+                  _PendingBar(paneId: widget.paneId),
                   InputBar(
                     pane: foundPane,
                     mode: _mode,
@@ -348,6 +350,170 @@ class _RoundButton extends StatelessWidget {
           padding: const EdgeInsets.all(8),
           child: Icon(icon, size: 18, color: Colors.white),
         ),
+      ),
+    );
+  }
+}
+
+/// Pending-message queue strip shown above the InputBar. Lists messages held
+/// because Claude was busy; each can be edited or deleted. Hidden when empty.
+/// Refetches on every snapshot tick so delivered messages drop off live.
+class _PendingBar extends ConsumerWidget {
+  const _PendingBar({required this.paneId});
+  final String paneId;
+
+  Future<void> _edit(
+      BuildContext context, WidgetRef ref, PendingMessage m) async {
+    final controller = TextEditingController(text: m.text);
+    final text = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('编辑待发送消息'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: null,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c), child: const Text('取消')),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (text == null || text.isEmpty || text == m.text) return;
+    try {
+      await ref.read(apiProvider).pendingUpdate(paneId, m.id, text);
+    } finally {
+      ref.invalidate(pendingProvider(paneId));
+    }
+  }
+
+  Future<void> _delete(WidgetRef ref, PendingMessage m) async {
+    try {
+      await ref.read(apiProvider).pendingDelete(paneId, m.id);
+    } finally {
+      ref.invalidate(pendingProvider(paneId));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Keep the queue live: re-fetch whenever a new snapshot arrives (the server
+    // flushes messages as the pane goes idle).
+    ref.listen(snapshotProvider, (_, _) {
+      ref.invalidate(pendingProvider(paneId));
+    });
+
+    final messages =
+        ref.watch(pendingProvider(paneId)).valueOrNull?.messages ?? const [];
+    if (messages.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxHeight: 168),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        border: Border(
+          top: BorderSide(color: AgentPortTheme.separator(Brightness.dark)),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 8, 4),
+            child: Row(
+              children: [
+                const Icon(Icons.schedule, size: 14, color: Colors.white54),
+                const SizedBox(width: 6),
+                Text(
+                  '待发送 ${messages.length}',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Claude 空闲后自动发送',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.38),
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.only(bottom: 6),
+              itemCount: messages.length,
+              itemBuilder: (context, i) => _PendingRow(
+                message: messages[i],
+                onEdit: () => _edit(context, ref, messages[i]),
+                onDelete: () => _delete(ref, messages[i]),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingRow extends StatelessWidget {
+  const _PendingRow({
+    required this.message,
+    required this.onEdit,
+    required this.onDelete,
+  });
+  final PendingMessage message;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 3, 6, 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Text(
+              message.text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                height: 1.25,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            color: Colors.white54,
+            visualDensity: VisualDensity.compact,
+            tooltip: '编辑',
+            onPressed: onEdit,
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            color: Colors.white54,
+            visualDensity: VisualDensity.compact,
+            tooltip: '删除',
+            onPressed: onDelete,
+          ),
+        ],
       ),
     );
   }

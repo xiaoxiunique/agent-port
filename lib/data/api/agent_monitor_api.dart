@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../models/agent_event.dart';
 import '../models/api.dart';
 import '../models/cc_switch.dart';
+import '../models/pending.dart';
 import '../models/project_history.dart';
 import '../models/running_app.dart';
 import '../models/snapshot.dart';
@@ -78,13 +79,50 @@ class AgentMonitorApi {
 
   // --- Input ---
 
-  /// `POST /api/send`
-  Future<PaneCommandResponse> send(SendRequest req) async {
+  /// `POST /api/send`. Returns [SendResult]: when the target is a busy Claude
+  /// pane the server holds the message (`queued == true`) instead of sending.
+  Future<SendResult> send(SendRequest req) async {
     final r = await _dio.post<Map<String, dynamic>>(
       '/api/send',
       data: req.toJson(),
     );
-    return PaneCommandResponse.fromJson(r.data!);
+    return SendResult.fromJson(r.data!);
+  }
+
+  /// `GET /api/pending?paneId=` — the pane's pending-message queue.
+  Future<PendingList> pendingList(String paneId) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/api/pending',
+      queryParameters: {'paneId': paneId},
+    );
+    return PendingList.fromJson(r.data!);
+  }
+
+  /// `POST /api/pending/update` — edit a queued message's text.
+  Future<PendingList> pendingUpdate(String paneId, String id, String text) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/api/pending/update',
+      data: {'paneId': paneId, 'id': id, 'text': text},
+    );
+    return PendingList.fromJson(r.data!);
+  }
+
+  /// `POST /api/pending/delete` — remove one queued message.
+  Future<PendingList> pendingDelete(String paneId, String id) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/api/pending/delete',
+      data: {'paneId': paneId, 'id': id},
+    );
+    return PendingList.fromJson(r.data!);
+  }
+
+  /// `POST /api/pending/clear?paneId=` — drop the whole queue.
+  Future<PendingList> pendingClear(String paneId) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/api/pending/clear',
+      queryParameters: {'paneId': paneId},
+    );
+    return PendingList.fromJson(r.data!);
   }
 
   /// `POST /api/key?paneId=&key=` — no body; params in query.

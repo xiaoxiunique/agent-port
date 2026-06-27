@@ -103,13 +103,17 @@ class _InputBarState extends ConsumerState<InputBar> {
     try {
       final api = ref.read(apiProvider);
       final payload = goal ? _goalText(raw) : raw;
-      await api.send(SendRequest(
+      final result = await api.send(SendRequest(
         paneId: widget.pane.id,
         text: payload,
         submitKey: widget.pane.sendSubmitKey,
         vimMode: _vimMode,
       ));
       _controller.clear();
+      ref.invalidate(pendingProvider(widget.pane.id));
+      if (result.queued && mounted) {
+        _snack('Claude 正忙,已加入待发送队列 (${result.pendingCount})');
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _goalMode = goal);
@@ -127,12 +131,16 @@ class _InputBarState extends ConsumerState<InputBar> {
     }
     setState(() => _sending = true);
     try {
-      await ref.read(apiProvider).send(SendRequest(
+      final result = await ref.read(apiProvider).send(SendRequest(
             paneId: widget.pane.id,
             text: text,
             submitKey: widget.pane.sendSubmitKey,
             vimMode: _vimMode,
           ));
+      ref.invalidate(pendingProvider(widget.pane.id));
+      if (result.queued && mounted) {
+        _snack('Claude 正忙,已加入待发送队列 (${result.pendingCount})');
+      }
     } catch (e) {
       if (mounted) _snack('发送失败: $e');
     } finally {
