@@ -49,3 +49,4 @@ AgentMonitorService/target/
 .env
 .env.*
 !.env.example
+.asc_shots/

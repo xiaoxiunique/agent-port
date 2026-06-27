@@ -14,7 +14,12 @@ final apiProvider = Provider<AgentMonitorApi>((ref) {
   if (settings != null && settings.activeProfileId.isNotEmpty) {
     for (final p in settings.profiles) {
       if (p.id == settings.activeProfileId) {
-        return AgentMonitorApi(baseUrl: p.url, token: p.token);
+        // The Demo profile's sentinel url ('demo') is not a valid URL; hand the
+        // client a harmless absolute placeholder so eager URL parsing (e.g.
+        // Image.network for app icons) doesn't throw. Demo code paths return
+        // offline sample data and never actually hit the network.
+        final url = p.url == demoProfileUrl ? 'http://demo.invalid' : p.url;
+        return AgentMonitorApi(baseUrl: url, token: p.token);
       }
     }
   }
