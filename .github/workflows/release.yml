@@ -130,3 +130,49 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/agent-monitor-service-${{ matrix.name }}
+
+  android-apk:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # AGP 8.x / Gradle 8.14 require JDK 17.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.38.6
+          cache: true
+
+      - run: flutter pub get
+
+      # Release buildType falls back to the debug signing key (no keystore in
+      # repo), so this produces an installable, side-loadable APK — not a
+      # Play-Store upload artifact.
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Stage APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          VER="${GITHUB_REF_NAME:-dev}"
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/AgentPort-${VER}-android.apk"
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: dist/*.apk
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk
