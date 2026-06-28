@@ -491,54 +491,69 @@ class _InputBarState extends ConsumerState<InputBar> {
   void _openMoreSheet(bool isClaude) {
     _showSheet(
       title: '更多',
-      padded: false,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SheetRow(
-            icon: widget.mode == RuntimeMode.terminal
-                ? Icons.description_outlined
-                : Icons.terminal,
-            label: widget.mode == RuntimeMode.terminal ? '打开日志' : '打开终端',
-            onTap: () {
-              Navigator.pop(context);
-              widget.onToggleMode();
-            },
-          ),
-          if (isClaude)
-            _SheetRow(
-              icon: Icons.edit_outlined,
-              label: _vimMode ? '关闭 Vim 模式' : '开启 Vim 模式',
-              trailing: _vimMode
-                  ? Icon(Icons.check, size: 18, color: Theme.of(context).colorScheme.primary)
-                  : null,
-              onTap: () {
-                Navigator.pop(context);
-                setState(() => _vimMode = !_vimMode);
-              },
-            ),
-          if (_quickReplies.isNotEmpty) ...[
-            const _SheetSectionLabel('快捷回复'),
-            for (final q in _quickReplies)
-              _SheetRow(
-                icon: Icons.reply,
-                label: q,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _ActionChip(
+                icon: widget.mode == RuntimeMode.terminal
+                    ? Icons.description_outlined
+                    : Icons.terminal,
+                label: widget.mode == RuntimeMode.terminal ? '日志' : '终端',
                 onTap: () {
                   Navigator.pop(context);
-                  _sendPreset(q);
+                  widget.onToggleMode();
                 },
               ),
-          ],
-          const Divider(height: 1),
-          _SheetRow(
-            icon: Icons.cancel_outlined,
-            label: '关闭 Pane',
-            destructive: true,
-            onTap: () {
-              Navigator.pop(context);
-              _kill();
-            },
+              if (isClaude)
+                _ActionChip(
+                  icon: Icons.edit_outlined,
+                  label: 'Vim',
+                  selected: _vimMode,
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _vimMode = !_vimMode);
+                  },
+                ),
+              _ActionChip(
+                icon: Icons.cancel_outlined,
+                label: '关闭 Pane',
+                destructive: true,
+                onTap: () {
+                  Navigator.pop(context);
+                  _kill();
+                },
+              ),
+            ],
           ),
+          if (_quickReplies.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('快捷回复',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final q in _quickReplies)
+                  _ActionChip(
+                    icon: Icons.reply,
+                    label: q,
+                    maxWidth: 220,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _sendPreset(q);
+                    },
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -556,7 +571,6 @@ class _InputBarState extends ConsumerState<InputBar> {
   void _showSheet({
     required String title,
     required Widget child,
-    bool padded = true,
   }) {
     final theme = Theme.of(context);
     showModalBottomSheet<void>(
@@ -601,9 +615,7 @@ class _InputBarState extends ConsumerState<InputBar> {
               ),
               Flexible(
                 child: SingleChildScrollView(
-                  padding: padded
-                      ? const EdgeInsets.fromLTRB(16, 4, 16, 16)
-                      : const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                   child: child,
                 ),
               ),
@@ -891,60 +903,72 @@ class _KeyChip extends StatelessWidget {
   }
 }
 
-/// A row inside the More sheet.
-class _SheetRow extends StatelessWidget {
-  const _SheetRow({
+/// A compact icon+label chip for the More sheet — mirrors [_KeyChip]'s look so
+/// More stays as tight as Keys. Supports a selected (accent fill) and a
+/// destructive (red) state, and an optional width cap for long quick replies.
+class _ActionChip extends StatelessWidget {
+  const _ActionChip({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.trailing,
+    this.selected = false,
     this.destructive = false,
+    this.maxWidth,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final Widget? trailing;
+  final bool selected;
   final bool destructive;
+  final double? maxWidth;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = destructive ? Colors.red : theme.colorScheme.onSurface;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(label,
-                  style: TextStyle(fontSize: 15, color: color)),
-            ),
-            ?trailing,
-          ],
+    final b = theme.brightness;
+    final accent = theme.colorScheme.primary;
+    final fg = destructive
+        ? Colors.red
+        : selected
+            ? Colors.white
+            : theme.colorScheme.onSurface;
+    final bg = selected
+        ? accent
+        : (b == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.10)
+            : Colors.black.withValues(alpha: 0.05));
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          height: 40,
+          constraints: BoxConstraints(maxWidth: maxWidth ?? double.infinity),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+                color: selected ? accent : AgentPortTheme.separator(b)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: fg),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600, color: fg)),
+              ),
+            ],
+          ),
         ),
       ),
-    );
-  }
-}
-
-/// A small grouped-section label inside a sheet.
-class _SheetSectionLabel extends StatelessWidget {
-  const _SheetSectionLabel(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Text(text,
-          style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.onSurfaceVariant)),
     );
   }
 }
