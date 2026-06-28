@@ -222,6 +222,15 @@ class AgentMonitorApi {
     return UsageDaily.fromJson(r.data!);
   }
 
+  /// `POST /api/push/register` — register this device's APNs token so the
+  /// server can deliver push notifications.
+  Future<void> registerPushToken(String deviceToken) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/api/push/register',
+      data: {'deviceToken': deviceToken},
+    );
+  }
+
   /// `GET /api/apps` — foreground GUI apps on the host Mac.
   Future<AppsResponse> listApps() async {
     final r = await _dio.get<Map<String, dynamic>>('/api/apps');

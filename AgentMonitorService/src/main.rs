@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env, fs,
     io::{Read, Write},
     net::SocketAddr,
@@ -59,6 +59,13 @@ static PANE_STATUS_CACHE: LazyLock<Mutex<HashMap<String, PaneStatus>>> =
 static PENDING_FLUSH_AT: LazyLock<Mutex<HashMap<String, Instant>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static PENDING_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+// --- Push notifications (APNs) ---
+// Registered iOS device tokens (hex). Populated by POST /api/push/register.
+static DEVICE_TOKENS: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+// Cached APNs provider JWT + when it was minted; refreshed ~every 50 min.
+static APNS_JWT: LazyLock<Mutex<Option<(String, Instant)>>> =
+    LazyLock::new(|| Mutex::new(None));
 static DEVICE_INFO_CACHE: LazyLock<Option<DeviceInfo>> =
     LazyLock::new(collect_device_info_uncached);
 static TMUX_PROGRAM_PATH: LazyLock<String> = LazyLock::new(resolve_tmux_program_path);
@@ -430,6 +437,9 @@ async fn main() {
         .route("/api/screen", get(api_screen))
         .route("/api/usage", get(api_usage))
         .route("/api/usage/daily", get(api_usage_daily))
+        .route("/api/push/register", post(api_push_register))
+        .route("/api/push/test", post(api_push_test))
+        .route("/api/push/status", get(api_push_status))
         .route("/ws", get(snapshot_ws))
         .route("/pane-log/ws", get(pane_log_ws))
         .route("/terminal/ws", get(terminal_ws));
@@ -469,6 +479,240 @@ async fn main() {
 
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+// ===========================================================================
+// Push notifications (APNs, token-based auth via a .p8 key)
+// ===========================================================================
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PushRegisterRequest {
+    device_token: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PushTestRequest {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    body: Option<String>,
+}
+
+struct ApnsConfig {
+    key_id: String,
+    team_id: String,
+    key_pem: String,
+    bundle_id: String,
+    production: bool,
+}
+
+/// Read APNs credentials from the environment. Returns None (push disabled)
+/// when any required value is missing, so the service runs fine without push.
+fn apns_config() -> Option<ApnsConfig> {
+    let key_id = env::var("APNS_KEY_ID").ok().filter(|s| !s.is_empty())?;
+    let team_id = env::var("APNS_TEAM_ID").ok().filter(|s| !s.is_empty())?;
+    let key_path = env::var("APNS_KEY_PATH").ok().filter(|s| !s.is_empty())?;
+    let key_pem = fs::read_to_string(&key_path).ok()?;
+    let bundle_id = env::var("APNS_BUNDLE_ID")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "dev.hcg.agentPort".to_string());
+    let production = env::var("APNS_ENV")
+        .map(|v| {
+            let v = v.to_ascii_lowercase();
+            v == "production" || v == "prod"
+        })
+        .unwrap_or(false);
+    Some(ApnsConfig {
+        key_id,
+        team_id,
+        key_pem,
+        bundle_id,
+        production,
+    })
+}
+
+/// Mint (and cache ~50 min) the APNs provider JWT (ES256, signed with the .p8).
+fn apns_jwt(cfg: &ApnsConfig) -> Option<String> {
+    if let Some((token, at)) = lock_recover(&APNS_JWT).as_ref() {
+        if at.elapsed() < Duration::from_secs(50 * 60) {
+            return Some(token.clone());
+        }
+    }
+    #[derive(Serialize)]
+    struct Claims {
+        iss: String,
+        iat: i64,
+    }
+    let key = jsonwebtoken::EncodingKey::from_ec_pem(cfg.key_pem.as_bytes()).ok()?;
+    let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
+    header.kid = Some(cfg.key_id.clone());
+    let claims = Claims {
+        iss: cfg.team_id.clone(),
+        iat: chrono::Utc::now().timestamp(),
+    };
+    let token = jsonwebtoken::encode(&header, &claims, &key).ok()?;
+    *lock_recover(&APNS_JWT) = Some((token.clone(), Instant::now()));
+    Some(token)
+}
+
+/// Send one alert to one device token over APNs HTTP/2. Blocking.
+fn apns_send_one(
+    cfg: &ApnsConfig,
+    jwt: &str,
+    device_token: &str,
+    title: &str,
+    body: &str,
+) -> Result<(), String> {
+    let host = if cfg.production {
+        "api.push.apple.com"
+    } else {
+        "api.sandbox.push.apple.com"
+    };
+    let url = format!("https://{host}/3/device/{device_token}");
+    let payload = json!({
+        "aps": {
+            "alert": { "title": title, "body": body },
+            "sound": "default",
+        }
+    });
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client
+        .post(&url)
+        .header("authorization", format!("bearer {jwt}"))
+        .header("apns-topic", cfg.bundle_id.as_str())
+        .header("apns-push-type", "alert")
+        .header("apns-priority", "10")
+        .json(&payload)
+        .send()
+        .map_err(|e| e.to_string())?;
+    let status = resp.status();
+    if status.is_success() {
+        Ok(())
+    } else {
+        Err(format!("{status}: {}", resp.text().unwrap_or_default()))
+    }
+}
+
+/// Fire-and-forget push to every registered device (used by status-change
+/// notifications in P2). Logs failures; never blocks the caller.
+#[allow(dead_code)]
+fn push_to_all(title: String, body: String) {
+    let Some(cfg) = apns_config() else {
+        return;
+    };
+    let tokens: Vec<String> = lock_recover(&DEVICE_TOKENS).iter().cloned().collect();
+    if tokens.is_empty() {
+        return;
+    }
+    tokio::task::spawn_blocking(move || {
+        let Some(jwt) = apns_jwt(&cfg) else {
+            eprintln!("[push] failed to mint APNs JWT");
+            return;
+        };
+        for token in tokens {
+            if let Err(error) = apns_send_one(&cfg, &jwt, &token, &title, &body) {
+                eprintln!("[push] send failed: {error}");
+            }
+        }
+    });
+}
+
+async fn api_push_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let cfg = apns_config();
+    let env = match &cfg {
+        Some(c) if c.production => "production",
+        Some(_) => "sandbox",
+        None => "unset",
+    };
+    let count = lock_recover(&DEVICE_TOKENS).len();
+    json_response(
+        StatusCode::OK,
+        json!({
+            "ok": true,
+            "configured": cfg.is_some(),
+            "env": env,
+            "deviceCount": count,
+        }),
+    )
+}
+
+async fn api_push_register(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+    Json(body): Json<PushRegisterRequest>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let token = body.device_token.trim().to_string();
+    if token.is_empty() {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "deviceToken is required" }),
+        );
+    }
+    lock_recover(&DEVICE_TOKENS).insert(token);
+    let count = lock_recover(&DEVICE_TOKENS).len();
+    json_response(StatusCode::OK, json!({ "ok": true, "count": count }))
+}
+
+/// Manual test: push a sample alert to every registered device and return the
+/// per-device APNs result inline (so env / token mismatches are visible).
+async fn api_push_test(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+    Json(body): Json<PushTestRequest>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let Some(cfg) = apns_config() else {
+        return json_response(
+            StatusCode::OK,
+            json!({ "ok": false, "error": "APNs not configured (set APNS_KEY_ID / APNS_TEAM_ID / APNS_KEY_PATH)" }),
+        );
+    };
+    let title = body.title.unwrap_or_else(|| "Agent Port".to_string());
+    let text = body.body.unwrap_or_else(|| "测试推送 ✅".to_string());
+    let results = tokio::task::spawn_blocking(move || {
+        let tokens: Vec<String> = lock_recover(&DEVICE_TOKENS).iter().cloned().collect();
+        if tokens.is_empty() {
+            return json!({ "ok": false, "error": "no registered devices" });
+        }
+        let Some(jwt) = apns_jwt(&cfg) else {
+            return json!({ "ok": false, "error": "failed to mint APNs JWT" });
+        };
+        let env = if cfg.production { "production" } else { "sandbox" };
+        let per: Vec<serde_json::Value> = tokens
+            .iter()
+            .map(|t| {
+                let head: String = t.chars().take(12).collect();
+                match apns_send_one(&cfg, &jwt, t, &title, &text) {
+                    Ok(()) => json!({ "token": format!("{head}…"), "ok": true }),
+                    Err(e) => json!({ "token": format!("{head}…"), "ok": false, "error": e }),
+                }
+            })
+            .collect();
+        json!({ "ok": true, "env": env, "results": per })
+    })
+    .await
+    .unwrap_or_else(|e| json!({ "ok": false, "error": format!("join error: {e}") }));
+    json_response(StatusCode::OK, results)
 }
 
 fn run_tmux(args: &[String]) -> Result<TmuxOutput, String> {

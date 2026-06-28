@@ -6,7 +6,9 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'core/router.dart';
 import 'core/theme.dart';
+import 'services/api_provider.dart';
 import 'services/host_service.dart';
+import 'services/push_service.dart';
 import 'services/settings_service.dart';
 import 'services/tray_service.dart';
 
@@ -29,6 +31,16 @@ class _AgentPortAppState extends ConsumerState<AgentPortApp> {
         TrayService.instance.init(appNavigatorKey, host);
         // Host app supervises its own Rust service — start it on launch.
         host.startService();
+      });
+    }
+    if (!kIsWeb && Platform.isIOS) {
+      // Request push permission + register the APNs token with the server.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(pushServiceProvider).init();
+      });
+      // Re-register the token whenever the active server profile changes.
+      ref.listenManual(apiProvider, (_, _) {
+        ref.read(pushServiceProvider).reregister();
       });
     }
   }
