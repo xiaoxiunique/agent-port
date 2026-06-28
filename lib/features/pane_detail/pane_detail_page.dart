@@ -47,69 +47,70 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
         : (pane != null ? pane.projectName : widget.paneId);
     final foundPane = pane;
 
-    // The console/terminal screen is always dark (matches the native detail
-    // sheet), regardless of the system theme.
-    return Theme(
-      data: AgentPortTheme.dark,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(title, overflow: TextOverflow.ellipsis),
-          actions: [
-            if (foundPane != null && !kIsWeb && Platform.isIOS)
-              IconButton(
-                icon: const Icon(Icons.picture_in_picture),
-                tooltip: '画中画',
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  if (!await PipService.isSupported) {
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('此设备不支持画中画')),
-                    );
-                    return;
-                  }
-                  try {
-                    await PipService.start(
-                      title: foundPane.command.isNotEmpty
-                          ? foundPane.command
-                          : foundPane.session,
-                      status: foundPane.status.name,
-                      body: foundPane.tail,
-                    );
-                  } catch (e) {
-                    messenger.showSnackBar(
-                      SnackBar(content: Text('画中画启动失败: $e')),
-                    );
-                  }
-                },
-              ),
-          ],
-        ),
-        body: foundPane == null
-            ? const Center(child: Text('pane 不在当前快照'))
-            : Column(
-                children: [
-                  Expanded(
-                    child: _mode == RuntimeMode.terminal
-                        ? TerminalPaneView(
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title, overflow: TextOverflow.ellipsis),
+        actions: [
+          if (foundPane != null && !kIsWeb && Platform.isIOS)
+            IconButton(
+              icon: const Icon(Icons.picture_in_picture),
+              tooltip: '画中画',
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                if (!await PipService.isSupported) {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('此设备不支持画中画')),
+                  );
+                  return;
+                }
+                try {
+                  await PipService.start(
+                    title: foundPane.command.isNotEmpty
+                        ? foundPane.command
+                        : foundPane.session,
+                    status: foundPane.status.name,
+                    body: foundPane.tail,
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('画中画启动失败: $e')),
+                  );
+                }
+              },
+            ),
+        ],
+      ),
+      // The xterm terminal stays dark regardless of system theme (matches the
+      // native detail sheet); the log view and the surrounding shell follow
+      // the system light/dark setting.
+      body: foundPane == null
+          ? const Center(child: Text('pane 不在当前快照'))
+          : Column(
+              children: [
+                Expanded(
+                  child: _mode == RuntimeMode.terminal
+                      ? Theme(
+                          data: AgentPortTheme.dark,
+                          child: TerminalPaneView(
                             api: ref.read(apiProvider),
                             paneId: widget.paneId,
-                          )
-                        : _LogView(pane: foundPane),
-                  ),
-                  _PendingBar(paneId: widget.paneId),
-                  InputBar(
-                    pane: foundPane,
-                    mode: _mode,
-                    onToggleMode: () => setState(() {
-                      _mode = _mode == RuntimeMode.log
-                          ? RuntimeMode.terminal
-                          : RuntimeMode.log;
-                    }),
-                    onKilled: () => Navigator.of(context).maybePop(),
-                  ),
-                ],
-              ),
-      ),
+                          ),
+                        )
+                      : _LogView(pane: foundPane),
+                ),
+                _PendingBar(paneId: widget.paneId),
+                InputBar(
+                  pane: foundPane,
+                  mode: _mode,
+                  onToggleMode: () => setState(() {
+                    _mode = _mode == RuntimeMode.log
+                        ? RuntimeMode.terminal
+                        : RuntimeMode.log;
+                  }),
+                  onKilled: () => Navigator.of(context).maybePop(),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -198,11 +199,11 @@ class _LogViewState extends ConsumerState<_LogView> {
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               child: SelectableText(
                 widget.pane.tail.isEmpty ? '暂无运行输出' : widget.pane.tail,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 12,
                   height: 1.3,
-                  color: AgentPortTheme.terminalForeground,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),
@@ -218,9 +219,9 @@ class _LogViewState extends ConsumerState<_LogView> {
           child: Stack(
             children: [
               if (text.isEmpty)
-                const Center(
+                Center(
                   child: Text('暂无运行输出',
-                      style: TextStyle(color: Colors.white38)),
+                      style: TextStyle(color: Theme.of(context).hintColor)),
                 )
               else
                 NotificationListener<ScrollNotification>(
@@ -233,11 +234,11 @@ class _LogViewState extends ConsumerState<_LogView> {
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                     child: SelectableText(
                       text,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 12,
                         height: 1.3,
-                        color: AgentPortTheme.terminalForeground,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -288,14 +289,15 @@ class _StatusHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = statusColor(pane.status, Brightness.dark);
+    final b = Theme.of(context).brightness;
+    final color = statusColor(pane.status, b);
     final reason = pane.reason.trim();
     final connecting =
         state == PaneLogState.connecting || state == PaneLogState.reconnecting;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      color: Colors.white.withValues(alpha: 0.04),
+      color: AgentPortTheme.softFill(b),
       child: Row(
         children: [
           Container(
@@ -316,7 +318,9 @@ class _StatusHeader extends StatelessWidget {
                 reason,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 12),
               ),
             ),
           ] else
@@ -340,15 +344,17 @@ class _RoundButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Material(
-      color: Colors.white.withValues(alpha: 0.12),
+      color: (dark ? Colors.white : Colors.black).withValues(alpha: 0.12),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(8),
-          child: Icon(icon, size: 18, color: Colors.white),
+          child: Icon(icon,
+              size: 18, color: Theme.of(context).colorScheme.onSurface),
         ),
       ),
     );
@@ -413,13 +419,14 @@ class _PendingBar extends ConsumerWidget {
         ref.watch(pendingProvider(paneId)).valueOrNull?.messages ?? const [];
     if (messages.isEmpty) return const SizedBox.shrink();
 
+    final brightness = Theme.of(context).brightness;
     return Container(
       width: double.infinity,
       constraints: const BoxConstraints(maxHeight: 168),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: AgentPortTheme.softFill(brightness),
         border: Border(
-          top: BorderSide(color: AgentPortTheme.separator(Brightness.dark)),
+          top: BorderSide(color: AgentPortTheme.separator(brightness)),
         ),
       ),
       child: Column(
@@ -430,12 +437,14 @@ class _PendingBar extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(14, 8, 8, 4),
             child: Row(
               children: [
-                const Icon(Icons.schedule, size: 14, color: Colors.white54),
+                Icon(Icons.schedule,
+                    size: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
                 const SizedBox(width: 6),
                 Text(
                   '待发送 ${messages.length}',
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -444,7 +453,7 @@ class _PendingBar extends ConsumerWidget {
                 Text(
                   'Claude 空闲后自动发送',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.38),
+                    color: Theme.of(context).hintColor,
                     fontSize: 11,
                   ),
                 ),
@@ -492,8 +501,8 @@ class _PendingRow extends StatelessWidget {
               message.text,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
                 fontSize: 13,
                 height: 1.25,
               ),
@@ -501,14 +510,14 @@ class _PendingRow extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 18),
-            color: Colors.white54,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
             visualDensity: VisualDensity.compact,
             tooltip: '编辑',
             onPressed: onEdit,
           ),
           IconButton(
             icon: const Icon(Icons.close, size: 18),
-            color: Colors.white54,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
             visualDensity: VisualDensity.compact,
             tooltip: '删除',
             onPressed: onDelete,
