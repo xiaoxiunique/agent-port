@@ -1,7 +1,7 @@
 name: agent_port
 description: "Agent Port — Flutter client for Agent Monitor (tmux agent session monitor & control)."
 publish_to: 'none'
-version: 1.0.0+9
+version: 1.0.0+10
 
 environment:
   sdk: ^3.10.7
