@@ -66,6 +66,11 @@ static DEVICE_TOKENS: LazyLock<Mutex<HashSet<String>>> =
 // Cached APNs provider JWT + when it was minted; refreshed ~every 50 min.
 static APNS_JWT: LazyLock<Mutex<Option<(String, Instant)>>> =
     LazyLock::new(|| Mutex::new(None));
+// Local SQLite DB (~/.agent-monitor/agent-port.db) for state that must survive
+// restarts (currently: registered device tokens). None if it can't be opened,
+// in which case the service still runs fully in-memory.
+static DB: LazyLock<Mutex<Option<rusqlite::Connection>>> =
+    LazyLock::new(|| Mutex::new(open_db()));
 static DEVICE_INFO_CACHE: LazyLock<Option<DeviceInfo>> =
     LazyLock::new(collect_device_info_uncached);
 static TMUX_PROGRAM_PATH: LazyLock<String> = LazyLock::new(resolve_tmux_program_path);
@@ -396,6 +401,9 @@ async fn main() {
         pane_log_refreshes,
     };
 
+    // Restore persisted state (device tokens) from the local SQLite DB.
+    load_device_tokens();
+
     spawn_snapshot_loop(state.clone());
 
     // Pre-warm + periodically refresh the token-usage cache so /api/usage is
@@ -479,6 +487,66 @@ async fn main() {
 
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+// ===========================================================================
+// Local persistence (SQLite)
+// ===========================================================================
+
+fn db_path() -> Option<PathBuf> {
+    let home = env::var_os("HOME")?;
+    let dir = PathBuf::from(home).join(".agent-monitor");
+    fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("agent-port.db"))
+}
+
+/// Open (and migrate) the local SQLite DB. Returns None on any failure so the
+/// service degrades to in-memory-only rather than refusing to start.
+fn open_db() -> Option<rusqlite::Connection> {
+    let path = db_path()?;
+    let conn = rusqlite::Connection::open(&path).ok()?;
+    let _ = conn.pragma_update(None, "journal_mode", "WAL");
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS device_tokens (
+            token TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL
+        )",
+        [],
+    )
+    .ok()?;
+    Some(conn)
+}
+
+/// Load persisted device tokens into the in-memory set at startup.
+fn load_device_tokens() {
+    let tokens: Vec<String> = {
+        let guard = lock_recover(&DB);
+        let Some(conn) = guard.as_ref() else {
+            return;
+        };
+        let Ok(mut stmt) = conn.prepare("SELECT token FROM device_tokens") else {
+            return;
+        };
+        let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) else {
+            return;
+        };
+        rows.flatten().collect()
+    };
+    let mut set = lock_recover(&DEVICE_TOKENS);
+    for token in tokens {
+        set.insert(token);
+    }
+}
+
+/// Persist one device token (idempotent).
+fn save_device_token(token: &str) {
+    let guard = lock_recover(&DB);
+    if let Some(conn) = guard.as_ref() {
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO device_tokens (token, created_at) VALUES (?1, ?2)",
+            rusqlite::params![token, now_iso()],
+        );
+    }
 }
 
 // ===========================================================================
@@ -665,7 +733,8 @@ async fn api_push_register(
             json!({ "error": "deviceToken is required" }),
         );
     }
-    lock_recover(&DEVICE_TOKENS).insert(token);
+    lock_recover(&DEVICE_TOKENS).insert(token.clone());
+    save_device_token(&token);
     let count = lock_recover(&DEVICE_TOKENS).len();
     json_response(StatusCode::OK, json!({ "ok": true, "count": count }))
 }
