@@ -1,16 +1,29 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../models/agent_event.dart';
 import '../models/api.dart';
 import '../models/cc_switch.dart';
+import '../models/notify_config.dart';
 import '../models/pending.dart';
 import '../models/project_history.dart';
 import '../models/running_app.dart';
 import '../models/snapshot.dart';
 import '../models/token_usage.dart';
 import '../models/usage_daily.dart';
+
+/// The platform this client runs on, sent as `x-agent-port-source` so the
+/// server can tell phone-initiated sends from desktop ones (for push policy).
+String _platformSource() {
+  if (kIsWeb) return 'web';
+  if (Platform.isIOS) return 'ios';
+  if (Platform.isAndroid) return 'android';
+  if (Platform.isMacOS) return 'macos';
+  return 'desktop';
+}
 
 /// Typed HTTP client for the Agent Monitor Rust service.
 ///
@@ -25,7 +38,8 @@ class AgentMonitorApi {
     _dio.options
       ..baseUrl = baseUrl
       ..connectTimeout = const Duration(seconds: 8)
-      ..receiveTimeout = const Duration(seconds: 20);
+      ..receiveTimeout = const Duration(seconds: 20)
+      ..headers['x-agent-port-source'] = _platformSource();
     if (token != null && token.isNotEmpty) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
     }
@@ -229,6 +243,25 @@ class AgentMonitorApi {
       '/api/push/register',
       data: {'deviceToken': deviceToken},
     );
+  }
+
+  /// `GET /api/pane/notify-config?key=` — a session's notification config.
+  Future<NotifyConfig> getNotifyConfig(String key) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/api/pane/notify-config',
+      queryParameters: {'key': key},
+    );
+    return NotifyConfig.fromJson(r.data!);
+  }
+
+  /// `POST /api/pane/notify-config` — save a session's notification config.
+  Future<NotifyConfig> setNotifyConfig(
+      String key, bool enabled, List<String> events) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/api/pane/notify-config',
+      data: {'key': key, 'enabled': enabled, 'events': events},
+    );
+    return NotifyConfig.fromJson(r.data!);
   }
 
   /// `GET /api/apps` — foreground GUI apps on the host Mac.

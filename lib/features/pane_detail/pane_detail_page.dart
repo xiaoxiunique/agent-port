@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,9 +9,9 @@ import '../../data/models/pending.dart';
 import '../../services/api_provider.dart';
 import '../../services/demo_data.dart';
 import '../../services/pane_log_service.dart';
-import '../../services/pip_service.dart';
 import '../../services/snapshot_service.dart';
 import 'input_bar.dart';
+import 'pane_settings_page.dart';
 import 'terminal_pane_view.dart';
 
 /// Single-page pane detail with a Logs/Terminal mode toggle and a unified
@@ -51,32 +48,15 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
       appBar: AppBar(
         title: Text(title, overflow: TextOverflow.ellipsis),
         actions: [
-          if (foundPane != null && !kIsWeb && Platform.isIOS)
+          if (foundPane != null)
             IconButton(
-              icon: const Icon(Icons.picture_in_picture),
-              tooltip: '画中画',
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                if (!await PipService.isSupported) {
-                  messenger.showSnackBar(
-                    const SnackBar(content: Text('此设备不支持画中画')),
-                  );
-                  return;
-                }
-                try {
-                  await PipService.start(
-                    title: foundPane.command.isNotEmpty
-                        ? foundPane.command
-                        : foundPane.session,
-                    status: foundPane.status.name,
-                    body: foundPane.tail,
-                  );
-                } catch (e) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('画中画启动失败: $e')),
-                  );
-                }
-              },
+              icon: const Icon(Icons.notifications_none),
+              tooltip: '通知设置',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PaneSettingsPage(pane: foundPane),
+                ),
+              ),
             ),
         ],
       ),
