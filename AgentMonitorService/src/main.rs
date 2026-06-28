@@ -71,6 +71,18 @@ static APNS_JWT: LazyLock<Mutex<Option<(String, Instant)>>> =
 // in which case the service still runs fully in-memory.
 static DB: LazyLock<Mutex<Option<rusqlite::Connection>>> =
     LazyLock::new(|| Mutex::new(open_db()));
+// Per-session notification config (key = pane.path), cached in memory and
+// persisted in `notify_config`. Loaded at startup.
+static NOTIFY_CONFIG: LazyLock<Mutex<HashMap<String, NotifyConfig>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+// Per-session "this turn was kicked off from a phone" flag (key = pane.path).
+// Set by a mobile /api/send, cleared by a desktop send, consumed when a
+// status-change notification fires. In-memory only.
+static MOBILE_TRIGGERED: LazyLock<Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+// Previous status per session (key = pane.path) for status-change detection.
+static NOTIFY_PREV_STATUS: LazyLock<Mutex<HashMap<String, PaneStatus>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 static DEVICE_INFO_CACHE: LazyLock<Option<DeviceInfo>> =
     LazyLock::new(collect_device_info_uncached);
 static TMUX_PROGRAM_PATH: LazyLock<String> = LazyLock::new(resolve_tmux_program_path);
@@ -401,8 +413,9 @@ async fn main() {
         pane_log_refreshes,
     };
 
-    // Restore persisted state (device tokens) from the local SQLite DB.
+    // Restore persisted state from the local SQLite DB.
     load_device_tokens();
+    load_notify_config();
 
     spawn_snapshot_loop(state.clone());
 
@@ -448,6 +461,10 @@ async fn main() {
         .route("/api/push/register", post(api_push_register))
         .route("/api/push/test", post(api_push_test))
         .route("/api/push/status", get(api_push_status))
+        .route(
+            "/api/pane/notify-config",
+            get(api_notify_config_get).post(api_notify_config_set),
+        )
         .route("/ws", get(snapshot_ws))
         .route("/pane-log/ws", get(pane_log_ws))
         .route("/terminal/ws", get(terminal_ws));
@@ -514,6 +531,16 @@ fn open_db() -> Option<rusqlite::Connection> {
         [],
     )
     .ok()?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS notify_config (
+            key TEXT PRIMARY KEY,
+            enabled INTEGER NOT NULL,
+            events TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    )
+    .ok()?;
     Some(conn)
 }
 
@@ -547,6 +574,77 @@ fn save_device_token(token: &str) {
             rusqlite::params![token, now_iso()],
         );
     }
+}
+
+#[derive(Clone)]
+struct NotifyConfig {
+    enabled: bool,
+    events: Vec<String>,
+}
+
+impl NotifyConfig {
+    fn default_off() -> Self {
+        NotifyConfig {
+            enabled: false,
+            events: vec!["waiting".to_string(), "done".to_string()],
+        }
+    }
+}
+
+/// Load persisted notification configs into memory at startup.
+fn load_notify_config() {
+    let rows: Vec<(String, bool, String)> = {
+        let guard = lock_recover(&DB);
+        let Some(conn) = guard.as_ref() else {
+            return;
+        };
+        let Ok(mut stmt) = conn.prepare("SELECT key, enabled, events FROM notify_config") else {
+            return;
+        };
+        let Ok(rows) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)? != 0,
+                row.get::<_, String>(2)?,
+            ))
+        }) else {
+            return;
+        };
+        rows.flatten().collect()
+    };
+    let mut map = lock_recover(&NOTIFY_CONFIG);
+    for (key, enabled, events) in rows {
+        let events = events
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        map.insert(key, NotifyConfig { enabled, events });
+    }
+}
+
+/// Persist (upsert) one session's notification config.
+fn save_notify_config(key: &str, cfg: &NotifyConfig) {
+    let guard = lock_recover(&DB);
+    if let Some(conn) = guard.as_ref() {
+        let _ = conn.execute(
+            "INSERT INTO notify_config (key, enabled, events, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(key) DO UPDATE SET
+               enabled = excluded.enabled,
+               events = excluded.events,
+               updated_at = excluded.updated_at",
+            rusqlite::params![key, cfg.enabled as i64, cfg.events.join(","), now_iso()],
+        );
+    }
+}
+
+/// Current notification config for a session path (default = disabled).
+fn notify_config_for(path: &str) -> NotifyConfig {
+    lock_recover(&NOTIFY_CONFIG)
+        .get(path)
+        .cloned()
+        .unwrap_or_else(NotifyConfig::default_off)
 }
 
 // ===========================================================================
@@ -668,8 +766,7 @@ fn apns_send_one(
 }
 
 /// Fire-and-forget push to every registered device (used by status-change
-/// notifications in P2). Logs failures; never blocks the caller.
-#[allow(dead_code)]
+/// notifications). Logs failures; never blocks the caller.
 fn push_to_all(title: String, body: String) {
     let Some(cfg) = apns_config() else {
         return;
@@ -689,6 +786,63 @@ fn push_to_all(title: String, body: String) {
             }
         }
     });
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NotifyConfigRequest {
+    key: String,
+    enabled: bool,
+    #[serde(default)]
+    events: Vec<String>,
+}
+
+async fn api_notify_config_get(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    let Some(key) = query.get("key").filter(|value| !value.is_empty()) else {
+        return json_response(StatusCode::BAD_REQUEST, json!({ "error": "key is required" }));
+    };
+    let cfg = notify_config_for(key);
+    json_response(
+        StatusCode::OK,
+        json!({ "ok": true, "enabled": cfg.enabled, "events": cfg.events }),
+    )
+}
+
+async fn api_notify_config_set(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+    Json(body): Json<NotifyConfigRequest>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    if body.key.is_empty() {
+        return json_response(StatusCode::BAD_REQUEST, json!({ "error": "key is required" }));
+    }
+    let allowed = ["waiting", "done"];
+    let events: Vec<String> = body
+        .events
+        .into_iter()
+        .filter(|event| allowed.contains(&event.as_str()))
+        .collect();
+    let cfg = NotifyConfig {
+        enabled: body.enabled,
+        events,
+    };
+    lock_recover(&NOTIFY_CONFIG).insert(body.key.clone(), cfg.clone());
+    save_notify_config(&body.key, &cfg);
+    json_response(
+        StatusCode::OK,
+        json!({ "ok": true, "enabled": cfg.enabled, "events": cfg.events }),
+    )
 }
 
 async fn api_push_status(
@@ -2930,11 +3084,69 @@ fn clean_command_output(output: String) -> Option<String> {
 fn broadcast_snapshot(state: &AppState) -> Snapshot {
     let snapshot = build_snapshot();
     flush_pending_messages(state, &snapshot.panes);
+    notify_status_changes(&snapshot.panes);
     let _ = state.snapshots.send(json!({
         "type": "snapshot",
         "snapshot": snapshot,
     }));
     snapshot
+}
+
+/// Tag (or clear) a session's "kicked off from a phone" flag based on the
+/// client platform that issued the send. Mobile sets it; desktop clears it.
+fn mark_send_source(path: &str, source: &str) {
+    if path.is_empty() {
+        return;
+    }
+    let mut map = lock_recover(&MOBILE_TRIGGERED);
+    if matches!(source, "ios" | "android") {
+        map.insert(path.to_string(), Instant::now());
+    } else {
+        map.remove(path);
+    }
+}
+
+/// Push a notification when a Claude session stops for a confirmation
+/// (Running→Waiting) or finishes its turn (Running→Idle/Done) — but only for
+/// turns kicked off from a phone (MOBILE_TRIGGERED) and sessions that opted in.
+fn notify_status_changes(panes: &[Pane]) {
+    for pane in panes {
+        let path = pane.path.trim();
+        if path.is_empty() {
+            continue;
+        }
+        if !is_claude_fields(&pane.session, &pane.command, &pane.title, "") {
+            continue;
+        }
+        let cur = pane.status.clone();
+        let prev = {
+            let mut map = lock_recover(&NOTIFY_PREV_STATUS);
+            let prev = map.get(path).cloned();
+            map.insert(path.to_string(), cur.clone());
+            prev
+        };
+        let event = match (prev, cur) {
+            (Some(PaneStatus::Running), PaneStatus::Waiting) => "waiting",
+            (Some(PaneStatus::Running), PaneStatus::Idle | PaneStatus::Done) => "done",
+            _ => continue,
+        };
+        let cfg = notify_config_for(path);
+        if !cfg.enabled || !cfg.events.iter().any(|e| e == event) {
+            continue;
+        }
+        // Only notify for phone-initiated turns; a desktop send (or no send at
+        // all — the user typing directly in tmux) means they're at the computer.
+        if lock_recover(&MOBILE_TRIGGERED).remove(path).is_none() {
+            continue;
+        }
+        let project = path.rsplit('/').find(|s| !s.is_empty()).unwrap_or(path);
+        let body = if event == "waiting" {
+            "需要你确认 ⏳"
+        } else {
+            "任务完成 ✅"
+        };
+        push_to_all(project.to_string(), body.to_string());
+    }
 }
 
 /// Last status `build_snapshot` computed for a pane (≤ poll interval stale).
@@ -3218,6 +3430,16 @@ async fn api_send(
     } else {
         requested_submit_key
     };
+
+    // Record who kicked off this turn (phone vs. computer) so status-change
+    // notifications only fire for phone-initiated turns the user walked away from.
+    if let Some(pane) = target_pane.as_ref() {
+        let source = headers
+            .get("x-agent-port-source")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("");
+        mark_send_source(&pane.path, source);
+    }
 
     // Pending queue (Claude Code only): if the agent is currently busy, hold the
     // message and let `flush_pending_messages` deliver it once the pane is idle.
