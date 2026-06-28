@@ -2660,7 +2660,11 @@ fn flush_pending_messages(state: &AppState, panes: &[Pane]) {
         if !matches!(pane.status, PaneStatus::Idle | PaneStatus::Done) {
             continue;
         }
-        if !is_claude_fields(&pane.session, &pane.command, &pane.title, &pane.tail) {
+        // Identify the agent by session/command/title only — never by `tail`.
+        // The screen text may mention "codex"/"gpt-" (e.g. while chatting with
+        // Claude about Codex), which would otherwise misclassify the pane and
+        // strand its queue. Mirrors the enqueue check in `api_send`.
+        if !is_claude_fields(&pane.session, &pane.command, &pane.title, "") {
             continue;
         }
         if let Some(at) = lock_recover(&PENDING_FLUSH_AT).get(&pane.id) {
