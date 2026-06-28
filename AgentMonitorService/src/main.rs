@@ -429,6 +429,7 @@ async fn main() {
         .route("/api/apps/screenshot", get(api_app_screenshot))
         .route("/api/screen", get(api_screen))
         .route("/api/usage", get(api_usage))
+        .route("/api/usage/daily", get(api_usage_daily))
         .route("/ws", get(snapshot_ws))
         .route("/pane-log/ws", get(pane_log_ws))
         .route("/terminal/ws", get(terminal_ws));
@@ -3472,6 +3473,9 @@ async fn api_screen(
 /// Cached total token usage (Claude Code + Codex), computed via `ccusage`.
 static USAGE_CACHE: LazyLock<Mutex<Option<(Instant, serde_json::Value)>>> =
     LazyLock::new(|| Mutex::new(None));
+/// Cached per-day usage breakdown (Settings → Usage page).
+static USAGE_DAILY_CACHE: LazyLock<Mutex<Option<(Instant, serde_json::Value)>>> =
+    LazyLock::new(|| Mutex::new(None));
 const USAGE_TTL: Duration = Duration::from_secs(300);
 
 /// Run `ccusage <subcmd> --json` (via a login shell so bun/PATH resolve) and
@@ -3533,6 +3537,133 @@ async fn api_usage(
         }
     };
     *lock_recover(&USAGE_CACHE) = Some((Instant::now(), value.clone()));
+    json_response(StatusCode::OK, value)
+}
+
+/// Run `ccusage <subcmd> --json` and return (all-time totals, per-day rows).
+/// Each row is normalized to `{date, tokens, cost}` (Claude uses `period`/
+/// `totalCost`, Codex uses `date`/`costUSD`).
+fn ccusage_daily(subcmd: &str) -> Option<(serde_json::Value, Vec<serde_json::Value>)> {
+    let cmd = format!("bunx ccusage {subcmd} --json --offline");
+    let out = command_stdout("/bin/zsh", &["-lc", &cmd])?;
+    let v: serde_json::Value = serde_json::from_str(out.trim()).ok()?;
+    let totals = v
+        .get("totals")
+        .map(|t| {
+            json!({
+                "totalTokens": t.get("totalTokens").cloned().unwrap_or(json!(0)),
+                "inputTokens": t.get("inputTokens").cloned().unwrap_or(json!(0)),
+                "outputTokens": t.get("outputTokens").cloned().unwrap_or(json!(0)),
+                "cost": t.get("totalCost").or_else(|| t.get("costUSD")).cloned().unwrap_or(json!(0)),
+            })
+        })
+        .unwrap_or(json!(null));
+    let rows = v
+        .get("daily")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|r| {
+                    let date = r
+                        .get("period")
+                        .or_else(|| r.get("date"))
+                        .and_then(|d| d.as_str())?
+                        .to_string();
+                    let tokens = r.get("totalTokens").and_then(|t| t.as_f64()).unwrap_or(0.0);
+                    let cost = r
+                        .get("totalCost")
+                        .or_else(|| r.get("costUSD"))
+                        .and_then(|c| c.as_f64())
+                        .unwrap_or(0.0);
+                    Some(json!({ "date": date, "tokens": tokens, "cost": cost }))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some((totals, rows))
+}
+
+fn compute_usage_daily() -> serde_json::Value {
+    let h_claude = thread::spawn(|| ccusage_daily("daily"));
+    let h_codex = thread::spawn(|| ccusage_daily("codex daily"));
+    let (claude_totals, claude_rows) = h_claude
+        .join()
+        .ok()
+        .flatten()
+        .unwrap_or((json!(null), Vec::new()));
+    let (codex_totals, codex_rows) = h_codex
+        .join()
+        .ok()
+        .flatten()
+        .unwrap_or((json!(null), Vec::new()));
+
+    // Merge both agents by date. BTreeMap keeps dates sorted ascending.
+    let mut by_date: std::collections::BTreeMap<String, (f64, f64, f64, f64)> =
+        std::collections::BTreeMap::new();
+    for r in &claude_rows {
+        if let Some(d) = r.get("date").and_then(|d| d.as_str()) {
+            let e = by_date.entry(d.to_string()).or_default();
+            e.0 += r.get("tokens").and_then(|t| t.as_f64()).unwrap_or(0.0);
+            e.1 += r.get("cost").and_then(|c| c.as_f64()).unwrap_or(0.0);
+        }
+    }
+    for r in &codex_rows {
+        if let Some(d) = r.get("date").and_then(|d| d.as_str()) {
+            let e = by_date.entry(d.to_string()).or_default();
+            e.2 += r.get("tokens").and_then(|t| t.as_f64()).unwrap_or(0.0);
+            e.3 += r.get("cost").and_then(|c| c.as_f64()).unwrap_or(0.0);
+        }
+    }
+    // Newest first.
+    let days: Vec<serde_json::Value> = by_date
+        .into_iter()
+        .rev()
+        .map(|(date, (ct, cc, xt, xc))| {
+            json!({
+                "date": date,
+                "claudeTokens": ct as i64,
+                "claudeCost": cc,
+                "codexTokens": xt as i64,
+                "codexCost": xc,
+            })
+        })
+        .collect();
+
+    json!({
+        "ok": claude_totals.is_object() || codex_totals.is_object() || !days.is_empty(),
+        "claude": claude_totals,
+        "codex": codex_totals,
+        "days": days,
+    })
+}
+
+/// `GET /api/usage/daily` — per-day Claude + Codex usage for the Usage page.
+async fn api_usage_daily(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response<Body> {
+    if !is_authed(&state, &headers, &query) {
+        return json_response(StatusCode::UNAUTHORIZED, json!({ "error": "unauthorized" }));
+    }
+    {
+        let cache = lock_recover(&USAGE_DAILY_CACHE);
+        if let Some((at, value)) = cache.as_ref() {
+            if at.elapsed() < USAGE_TTL {
+                return json_response(StatusCode::OK, value.clone());
+            }
+        }
+    }
+    let value = match tokio::task::spawn_blocking(compute_usage_daily).await {
+        Ok(v) => v,
+        Err(error) => {
+            return json_response(
+                StatusCode::OK,
+                json!({ "ok": false, "error": error.to_string() }),
+            )
+        }
+    };
+    *lock_recover(&USAGE_DAILY_CACHE) = Some((Instant::now(), value.clone()));
     json_response(StatusCode::OK, value)
 }
 

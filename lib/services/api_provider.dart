@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/api/agent_monitor_api.dart';
 import '../data/models/pending.dart';
 import '../data/models/token_usage.dart';
+import '../data/models/usage_daily.dart';
 import 'demo_data.dart';
 import 'settings_service.dart';
 
@@ -37,6 +38,12 @@ final apiProvider = Provider<AgentMonitorApi>((ref) {
 final usageProvider = FutureProvider.autoDispose<TokenUsage>((ref) async {
   if (ref.watch(demoModeProvider)) return demoUsage();
   return ref.watch(apiProvider).usage();
+});
+
+/// Per-day Claude + Codex spend (server-side ccusage daily, cached ~5 min).
+final usageDailyProvider = FutureProvider.autoDispose<UsageDaily>((ref) async {
+  if (ref.watch(demoModeProvider)) return demoUsageDaily();
+  return ref.watch(apiProvider).usageDaily();
 });
 
 /// Pending-message queue for a pane (Claude Code only). Empty in Demo mode.

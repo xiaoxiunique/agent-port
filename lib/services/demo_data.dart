@@ -6,6 +6,7 @@ import '../data/models/project_history.dart';
 import '../data/models/running_app.dart';
 import '../data/models/snapshot.dart';
 import '../data/models/token_usage.dart';
+import '../data/models/usage_daily.dart';
 import 'settings_service.dart';
 
 /// Sentinel URL for the built-in Demo profile: fully offline sample data, no
@@ -137,6 +138,60 @@ TokenUsage demoUsage() => const TokenUsage(
         outputTokens: 280000000,
         cost: 389.10,
       ),
+    );
+
+/// Sample per-day usage for Demo mode (newest-first, last 5 days).
+UsageDaily demoUsageDaily() => const UsageDaily(
+      ok: true,
+      claude: AgentUsage(
+        totalTokens: 12400000000,
+        inputTokens: 9200000000,
+        outputTokens: 410000000,
+        cost: 642.50,
+      ),
+      codex: AgentUsage(
+        totalTokens: 7800000000,
+        inputTokens: 6100000000,
+        outputTokens: 280000000,
+        cost: 389.10,
+      ),
+      days: [
+        DayUsage(
+          date: '2026-06-28',
+          claudeTokens: 84000000,
+          claudeCost: 12.40,
+          codexTokens: 31000000,
+          codexCost: 4.10,
+        ),
+        DayUsage(
+          date: '2026-06-27',
+          claudeTokens: 312000000,
+          claudeCost: 41.80,
+          codexTokens: 96000000,
+          codexCost: 11.20,
+        ),
+        DayUsage(
+          date: '2026-06-26',
+          claudeTokens: 268000000,
+          claudeCost: 35.60,
+          codexTokens: 74000000,
+          codexCost: 9.05,
+        ),
+        DayUsage(
+          date: '2026-06-25',
+          claudeTokens: 190000000,
+          claudeCost: 24.30,
+          codexTokens: 52000000,
+          codexCost: 6.40,
+        ),
+        DayUsage(
+          date: '2026-06-24',
+          claudeTokens: 145000000,
+          claudeCost: 18.10,
+          codexTokens: 40000000,
+          codexCost: 4.90,
+        ),
+      ],
     );
 
 /// Sample running apps for Demo mode (机器监控 / 电脑 tab).

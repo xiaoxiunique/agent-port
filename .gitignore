@@ -50,3 +50,6 @@ AgentMonitorService/target/
 .env.*
 !.env.example
 .asc_shots/
+
+# Runtime artifacts from the service (uploaded images, etc.)
+output/

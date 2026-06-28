@@ -10,6 +10,7 @@ import '../models/project_history.dart';
 import '../models/running_app.dart';
 import '../models/snapshot.dart';
 import '../models/token_usage.dart';
+import '../models/usage_daily.dart';
 
 /// Typed HTTP client for the Agent Monitor Rust service.
 ///
@@ -213,6 +214,12 @@ class AgentMonitorApi {
   Future<TokenUsage> usage() async {
     final r = await _dio.get<Map<String, dynamic>>('/api/usage');
     return TokenUsage.fromJson(r.data!);
+  }
+
+  /// `GET /api/usage/daily` — totals + per-day Claude + Codex spend.
+  Future<UsageDaily> usageDaily() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/usage/daily');
+    return UsageDaily.fromJson(r.data!);
   }
 
   /// `GET /api/apps` — foreground GUI apps on the host Mac.
