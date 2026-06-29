@@ -286,7 +286,7 @@ class _InputBarState extends ConsumerState<InputBar> {
       top: false,
       child: Material(
         color: theme.colorScheme.surface,
-        elevation: 8,
+        elevation: 0,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
