@@ -339,7 +339,7 @@ class _InputBarState extends ConsumerState<InputBar> {
       constraints: const BoxConstraints(minHeight: 42),
       padding: const EdgeInsets.symmetric(horizontal: 5),
       decoration: BoxDecoration(
-        color: AgentPortTheme.elevatedSurface(b),
+        color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(21),
         border: Border.all(color: AgentPortTheme.separator(b)),
       ),
