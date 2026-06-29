@@ -731,6 +731,7 @@ fn apns_send_one(
     device_token: &str,
     title: &str,
     body: &str,
+    pane_id: Option<&str>,
 ) -> Result<(), String> {
     let host = if cfg.production {
         "api.push.apple.com"
@@ -738,12 +739,15 @@ fn apns_send_one(
         "api.sandbox.push.apple.com"
     };
     let url = format!("https://{host}/3/device/{device_token}");
-    let payload = json!({
+    let mut payload = json!({
         "aps": {
             "alert": { "title": title, "body": body },
             "sound": "default",
         }
     });
+    if let Some(pane_id) = pane_id {
+        payload["paneId"] = json!(pane_id);
+    }
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
@@ -767,7 +771,7 @@ fn apns_send_one(
 
 /// Fire-and-forget push to every registered device (used by status-change
 /// notifications). Logs failures; never blocks the caller.
-fn push_to_all(title: String, body: String) {
+fn push_to_all(title: String, body: String, pane_id: Option<String>) {
     let Some(cfg) = apns_config() else {
         return;
     };
@@ -781,7 +785,9 @@ fn push_to_all(title: String, body: String) {
             return;
         };
         for token in tokens {
-            if let Err(error) = apns_send_one(&cfg, &jwt, &token, &title, &body) {
+            if let Err(error) =
+                apns_send_one(&cfg, &jwt, &token, &title, &body, pane_id.as_deref())
+            {
                 eprintln!("[push] send failed: {error}");
             }
         }
@@ -925,7 +931,7 @@ async fn api_push_test(
             .iter()
             .map(|t| {
                 let head: String = t.chars().take(12).collect();
-                match apns_send_one(&cfg, &jwt, t, &title, &text) {
+                match apns_send_one(&cfg, &jwt, t, &title, &text, None) {
                     Ok(()) => json!({ "token": format!("{head}…"), "ok": true }),
                     Err(e) => json!({ "token": format!("{head}…"), "ok": false, "error": e }),
                 }
@@ -3145,7 +3151,7 @@ fn notify_status_changes(panes: &[Pane]) {
         } else {
             "任务完成 ✅"
         };
-        push_to_all(project.to_string(), body.to_string());
+        push_to_all(project.to_string(), body.to_string(), Some(pane.id.clone()));
     }
 }
 
