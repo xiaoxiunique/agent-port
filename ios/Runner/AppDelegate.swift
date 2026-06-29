@@ -441,6 +441,7 @@ final class AgentPortPush: NSObject, UNUserNotificationCenterDelegate {
 
   private var channel: FlutterMethodChannel?
   private var deviceTokenHex: String?
+  private var pendingTapPaneId: String?
 
   func register(with controller: FlutterViewController) {
     let channel = FlutterMethodChannel(
@@ -455,6 +456,11 @@ final class AgentPortPush: NSObject, UNUserNotificationCenterDelegate {
         self.requestPermission(result)
       case "getToken":
         result(self.deviceTokenHex)
+      case "getPendingTap":
+        // Cold-start: the app was launched by tapping a notification before
+        // Dart wired up its handler. Hand over (and consume) the target pane.
+        result(self.pendingTapPaneId)
+        self.pendingTapPaneId = nil
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -479,12 +485,26 @@ final class AgentPortPush: NSObject, UNUserNotificationCenterDelegate {
     channel?.invokeMethod("onToken", arguments: hex)
   }
 
-  // Show the banner even while the app is foregrounded (useful for testing).
+  // Foreground: the user is already in the app, so don't pop our own banner.
   func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    completionHandler([.banner, .sound])
+    completionHandler([])
+  }
+
+  // The user tapped a notification → deep-link to that pane's detail page.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    if let paneId = response.notification.request.content.userInfo["paneId"] as? String,
+       !paneId.isEmpty {
+      pendingTapPaneId = paneId
+      channel?.invokeMethod("onTap", arguments: paneId)
+    }
+    completionHandler()
   }
 }

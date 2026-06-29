@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/router.dart';
 import 'api_provider.dart';
 
 final pushServiceProvider = Provider<PushService>((ref) => PushService(ref));
@@ -31,6 +32,9 @@ class PushService {
         _token = existing;
         await _register(existing);
       }
+      // Cold start: the app may have been launched by tapping a notification.
+      final tapped = await _channel.invokeMethod<String>('getPendingTap');
+      if (tapped != null && tapped.isNotEmpty) _navigate(tapped);
     } catch (_) {
       // Push unavailable (e.g. simulator without APNs entitlement); ignore.
     }
@@ -43,14 +47,24 @@ class PushService {
   }
 
   Future<dynamic> _onCall(MethodCall call) async {
-    if (call.method == 'onToken') {
-      final token = call.arguments as String?;
-      if (token != null && token.isNotEmpty) {
-        _token = token;
-        await _register(token);
-      }
+    switch (call.method) {
+      case 'onToken':
+        final token = call.arguments as String?;
+        if (token != null && token.isNotEmpty) {
+          _token = token;
+          await _register(token);
+        }
+      case 'onTap':
+        final paneId = call.arguments as String?;
+        if (paneId != null) _navigate(paneId);
     }
     return null;
+  }
+
+  /// Deep-link to a pane's detail page when its notification is tapped.
+  void _navigate(String paneId) {
+    if (paneId.isEmpty) return;
+    _ref.read(routerProvider).push('/pane/${Uri.encodeComponent(paneId)}');
   }
 
   Future<void> _register(String token) async {
