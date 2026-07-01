@@ -15,7 +15,7 @@ Ships as two parts in this repo:
 - **Multi-server profiles** + onboarding + settings
 - **CC Switch** provider switching + project history launch
 - **macOS host** — menu-bar tray, Rust subprocess lifecycle (health-check + auto-restart), control center, cc/cx wrapper install, LAN IP detection
-- **iOS Picture-in-Picture** — logs rendered to CVPixelBuffer video frames + `AVPictureInPictureController`
+- **iOS push** — APNs device-token registration + per-session notify config
 
 ## Requirements
 
@@ -46,7 +46,7 @@ On first launch, onboarding asks for the service URL (+ optional token).
 | Platform | Status |
 |---|---|
 | macOS | Full (host service + menu bar + control center) |
-| iOS | Full (incl. PiP, iOS 17+) |
+| iOS | Full (incl. APNs push, iOS 17+) |
 | Android | Builds (cleartext HTTP allowed for local/trusted nets) |
 | Web | Builds |
 | Linux / Windows | Builds (remote-client only — tmux host is Unix-only) |
@@ -60,7 +60,7 @@ lib/                   Flutter client (consumes that API)
 ├── data/
 │   ├── api/         AgentMonitorApi (dio, 11 endpoints)
 │   └── models/      freezed models (snapshot, pane, interaction, …)
-├── services/        snapshotProvider (WS), terminal session, host service, PiP, settings
+├── services/        snapshotProvider (WS), terminal session, host service, push, settings
 └── features/        monitor, pane_detail (terminal/actions/status), settings, onboarding, control_center
 ```
 
