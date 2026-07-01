@@ -1,0 +1,4 @@
+/* Microphone — voice input */
+"NSMicrophoneUsageDescription" = "Agent Port uses the microphone for voice input, transcribing your speech into text to send to the agent.";
+/* Speech recognition — voice input */
+"NSSpeechRecognitionUsageDescription" = "Agent Port uses speech recognition to transcribe your speech into text input.";
