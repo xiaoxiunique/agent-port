@@ -1535,9 +1535,13 @@ fn infer_status(pane: &BasePane, tail: &str, changed_recently: bool) -> (PaneSta
         return (PaneStatus::Done, "recent output looks complete".to_string());
     }
 
-    let agent_haystack = format!("{}\n{}\n{}", pane.session, pane.title, tail).to_lowercase();
-    let agent_like =
-        pane.command == "claude" || agent_haystack.contains("claude") || is_codex_pane(pane, tail);
+    // Identify agent panes the same way the send/flush path does — by
+    // session/command/title (e.g. the `cc_`/`cx_` wrapper prefix), never by the
+    // visible screen. A finished Claude pane often shows no literal "claude" in
+    // its last screen, which used to make it fall through to the generic
+    // "process is active → Running" branch below and strand its pending queue.
+    let agent_like = is_claude_fields(&pane.session, &pane.command, &pane.title, "")
+        || is_codex_pane(pane, tail);
     let live_agent_work = contains_any(&recent, &["esc to interrupt", "/stop to close"])
         && contains_any(&recent, &["working (", "thinking (", "running ("]);
 
