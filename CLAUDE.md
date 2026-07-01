@@ -43,21 +43,26 @@ dart run build_runner watch  --delete-conflicting-outputs   # during model work
 
 ## Architecture
 
-### Rust service (`AgentMonitorService/src/main.rs`, single ~3900-line file)
-Axum router (routes defined in `main()` around line 348). Endpoints:
+### Rust service (`AgentMonitorService/src/main.rs`, single ~5500-line file)
+Axum router (routes registered in `main()` around line 434). Endpoints:
 - `GET  /api/snapshot` — current tmux pane list + status
 - `GET  /api/pane/context` — pane tail/scrollback
 - `POST /api/send`, `/api/key` — send text / control keys to a pane
+- `GET/POST /api/pending`, `/api/pending/update|delete|clear` — server-side per-pane queue of messages waiting to be sent
 - `POST /api/refine-text` — DeepSeek text polish
 - `POST /api/upload-image` — raw image bytes
 - `POST /api/session/kill`
 - `GET  /api/project-history` + `POST /api/project-history/launch` — launch Claude/Codex on a past project
 - `GET  /api/cc-switch` + `POST /api/cc-switch/switch` — provider switching
+- `/api/apps`, `/api/apps/installed|open|icon|quit|screenshot`, `/api/screen` — macOS app launcher / window screenshots (control center)
+- `GET  /api/usage` + `GET /api/usage/daily` — Claude/Codex token-usage stats
+- `POST /api/push/register|test`, `GET /api/push/status` — APNs device-token registration (tokens persisted in SQLite via `rusqlite`)
+- `GET/POST /api/pane/notify-config` — per-pane push-notification config
 - `GET  /ws` — snapshot push stream
 - `GET  /pane-log/ws` — per-pane log stream (burst-refresh on activity)
 - `GET  /terminal/ws` — bidirectional PTY bridge (data → client, input/resize → PTY)
 
-The **PTY lives entirely on the server** (portable-pty); the client only renders. Global mutable state is a set of `LazyLock<Mutex<…>>` caches (pane activity, message cache, project history, etc.).
+The **PTY lives entirely on the server** (portable-pty); the client only renders. Most global mutable state is a set of `LazyLock<Mutex<…>>` caches (pane activity, message cache, project history, etc.); APNs device tokens are the exception — they live in a SQLite DB so they survive restarts.
 
 **Known server-side gotchas** (documented in PROJECT_STATUS, not yet fixed):
 - `/api/pane/events` is **called by the client but not registered** → 404. Status tab is effectively dead until this route is added.
@@ -66,13 +71,14 @@ The **PTY lives entirely on the server** (portable-pty); the client only renders
 
 ### Flutter client (`lib/`)
 ```
-core/        router (go_router), theme (dark only)
+core/        router (go_router), theme (follows system light/dark; terminal pane is always dark)
 data/
-  api/       AgentMonitorApi — dio client, ~11 endpoints, token auto-injected
-  models/    freezed models (snapshot, pane, interaction, cc_switch, …) + enums.dart
-services/    Riverpod providers (see below)
-features/    monitor (list) · pane_detail (terminal/actions/status + input_bar)
-             · settings · onboarding · control_center (macOS)
+  api/       AgentMonitorApi — dio client, token auto-injected (mirrors the routes above)
+  models/    freezed models (snapshot, pane, interaction, cc_switch, notify_config,
+             usage_daily, agent_event, …) + enums.dart
+services/    Riverpod providers + platform services (see below)
+features/    monitor (list) · pane_detail (single page + input_bar) · server (host home)
+             · settings · onboarding · control_center (macOS app launcher)
 ```
 
 **Riverpod provider graph** (the reconnection backbone):
@@ -87,7 +93,9 @@ Switching the active server profile cascades: settings → api → snapshot reco
 - `TrayService` — menu-bar tray (`tray_manager`); initialized in `app.dart` via `addPostFrameCallback` (engine must be ready before talking to AppKit). App uses `LSUIElement`.
 - `EnvironmentService` — installs `cc`/`cx` wrappers into `~/.agent-monitor/bin` + `~/.zshrc` PATH.
 
-**iOS PiP** is native Swift (logs → `CVPixelBuffer` frames → `AVPictureInPictureController`, iOS 17+).
+**iOS PiP** is native Swift (logs → `CVPixelBuffer` frames → `AVPictureInPictureController`, iOS 17+); `pip_service.dart` is the Dart bridge.
+
+**Other notable services**: `push_service.dart` (APNs token registration + per-pane notify config), `voice_input_service.dart` / `tencent_asr_service.dart` (speech-to-text for the input bar), `pane_log_service.dart` (`/pane-log/ws` consumer), `terminal_session.dart` (`/terminal/ws` PTY bridge).
 
 ## Project-specific conventions & traps
 
@@ -96,7 +104,6 @@ Switching the active server profile cascades: settings → api → snapshot reco
 - **`shared_preferences`, not `flutter_secure_storage`** — the latter conflicts with build_runner AOT. Tokens are stored in plain prefs.
 - **JSON casing across the boundary**: the Rust models use `#[serde(rename_all = "camelCase")]` on most structs, but a few enums are `snake_case`/`lowercase` (see `InteractionRole`, `PaneStatus`, etc.). Match the Dart `@JsonKey` / enum mapping to the Rust serde attribute, not to a guess.
 - **Android cleartext HTTP** is allowed via `network_security_config.xml` (the service has no TLS; intended for LAN / Tailscale).
-- **Dead code to be aware of**: `lib/features/pane_detail/actions_tab.dart` and `status_tab.dart` are leftovers from a three-tab design; the detail page is now single-page (`pane_detail_page.dart`). They are unreferenced — don't wire new work through them without checking PROJECT_STATUS first.
 
 ## Git
 
