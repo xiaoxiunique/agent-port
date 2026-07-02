@@ -50,10 +50,6 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Agent Port uses the microphone for voice input, transcribing your speech into text to send to the agent.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Agent Port uses speech recognition to transcribe your speech into text input.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

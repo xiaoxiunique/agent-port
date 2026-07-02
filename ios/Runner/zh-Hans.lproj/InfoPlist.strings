@@ -1,4 +1,1 @@
-/* 麦克风 — 语音输入 */
-"NSMicrophoneUsageDescription" = "Agent Port 使用麦克风进行语音输入，把语音转写为发送给 agent 的文本。";
-/* 语音识别 — 语音输入 */
-"NSSpeechRecognitionUsageDescription" = "Agent Port 使用语音识别把你的语音转写为文本输入。";
+/* No localized Info.plist keys (voice input / microphone permissions removed). */

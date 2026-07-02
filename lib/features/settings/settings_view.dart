@@ -85,14 +85,6 @@ class SettingsView extends ConsumerWidget {
               value: '$quickCount 个',
               onTap: () => _push(context, const _QuickButtonsPage()),
             ),
-            const _RowDivider(),
-            _Row(
-              icon: Icons.mic_none_outlined,
-              tint: const Color(0xFFFF2D55),
-              label: '语音识别',
-              value: s.voiceRecognitionProvider == 'tencent' ? '腾讯云' : '系统',
-              onTap: () => _push(context, const _VoicePage()),
-            ),
           ]),
           const _SectionHeader('工具'),
           _Grouped(children: [
@@ -1111,100 +1103,6 @@ class _QuickButtonsPage extends ConsumerWidget {
 }
 
 // ===========================================================================
-// Sub-page: Voice input
-// ===========================================================================
-
-class _VoicePage extends ConsumerStatefulWidget {
-  const _VoicePage();
-  @override
-  ConsumerState<_VoicePage> createState() => _VoicePageState();
-}
-
-class _VoicePageState extends ConsumerState<_VoicePage> {
-  final _appId = TextEditingController();
-  final _secretId = TextEditingController();
-  final _secretKey = TextEditingController();
-  final _token = TextEditingController();
-  bool _seeded = false;
-
-  @override
-  void dispose() {
-    _appId.dispose();
-    _secretId.dispose();
-    _secretKey.dispose();
-    _token.dispose();
-    super.dispose();
-  }
-
-  void _commit() {
-    ref.read(settingsProvider.notifier).setVoiceSettings(
-          appId: _appId.text.trim(),
-          secretId: _secretId.text.trim(),
-          secretKey: _secretKey.text.trim(),
-          token: _token.text.trim(),
-        );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = ref.watch(settingsProvider).valueOrNull;
-    final provider = s?.voiceRecognitionProvider ?? 'system';
-    if (!_seeded && s != null) {
-      _seeded = true;
-      _appId.text = s.tencentAsrAppId;
-      _secretId.text = s.tencentAsrSecretId;
-      _secretKey.text = s.tencentAsrSecretKey;
-      _token.text = s.tencentAsrToken;
-    }
-    final isTencent = provider == 'tencent';
-    final notifier = ref.read(settingsProvider.notifier);
-
-    return Scaffold(
-      backgroundColor: _settingsBg(context),
-      appBar: AppBar(title: const Text('语音识别')),
-      body: ListView(
-        children: [
-          const SizedBox(height: 12),
-          _Grouped(children: [
-            RadioGroup<String>(
-              groupValue: provider,
-              onChanged: (v) => notifier.setVoiceSettings(provider: v),
-              child: const Column(
-                children: [
-                  RadioListTile<String>(
-                    value: 'system',
-                    title: Text('系统'),
-                    subtitle: Text('Apple Speech / Android 系统语音'),
-                  ),
-                  _RowDivider(),
-                  RadioListTile<String>(
-                    value: 'tencent',
-                    title: Text('腾讯云'),
-                    subtitle: Text('实时 ASR(16k_zh),需填写凭证'),
-                  ),
-                ],
-              ),
-            ),
-          ]),
-          if (isTencent) ...[
-            const _SectionHeader('腾讯云凭证'),
-            _Grouped(children: [
-              _TextFieldRow(label: 'AppID', controller: _appId, onChanged: (_) => _commit()),
-              const _RowDivider(),
-              _TextFieldRow(label: 'SecretId', controller: _secretId, onChanged: (_) => _commit()),
-              const _RowDivider(),
-              _TextFieldRow(label: 'SecretKey', controller: _secretKey, obscure: true, onChanged: (_) => _commit()),
-              const _RowDivider(),
-              _TextFieldRow(label: 'Token', controller: _token, hint: '可选', obscure: true, onChanged: (_) => _commit()),
-            ]),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ===========================================================================
 // Sub-page: CC Switch
 // ===========================================================================
 
@@ -1867,7 +1765,6 @@ class _TextFieldRow extends StatelessWidget {
     this.hint,
     this.obscure = false,
     this.keyboardType,
-    this.onChanged,
   });
 
   final String label;
@@ -1875,7 +1772,6 @@ class _TextFieldRow extends StatelessWidget {
   final String? hint;
   final bool obscure;
   final TextInputType? keyboardType;
-  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1891,7 +1787,6 @@ class _TextFieldRow extends StatelessWidget {
               keyboardType: keyboardType,
               autocorrect: false,
               textAlign: TextAlign.right,
-              onChanged: onChanged,
               decoration: InputDecoration(
                 hintText: hint,
                 border: InputBorder.none,

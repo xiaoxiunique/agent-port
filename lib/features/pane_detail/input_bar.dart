@@ -11,8 +11,6 @@ import '../../data/models/pane_ext.dart';
 import '../../services/api_provider.dart';
 import '../../services/demo_data.dart';
 import '../../services/settings_service.dart';
-import '../../services/tencent_asr_service.dart';
-import '../../services/voice_input_service.dart';
 
 /// Which runtime surface the detail page shows.
 enum RuntimeMode { log, terminal }
@@ -43,11 +41,9 @@ class InputBar extends ConsumerStatefulWidget {
 
 class _InputBarState extends ConsumerState<InputBar> {
   final _controller = TextEditingController();
-  final _voice = VoiceInputController();
   bool _sending = false;
   bool _goalMode = false;
   bool _vimMode = false;
-  bool _voiceMode = false;
 
   Future<CcSwitchStatusResponse>? _ccFuture;
 
@@ -58,25 +54,13 @@ class _InputBarState extends ConsumerState<InputBar> {
       _ccFuture = ref.read(apiProvider).ccSwitchStatus();
     }
     _controller.addListener(() => setState(() {}));
-    _voice.addListener(_onVoice);
   }
 
   bool get _isDemo => ref.read(demoModeProvider);
 
-  void _onVoice() {
-    if (!mounted) return;
-    // Live partial transcript into the field while listening.
-    if (_voice.state == VoiceState.listening) {
-      _controller.text = _voice.transcript;
-    }
-    setState(() {});
-  }
-
   @override
   void dispose() {
     _controller.dispose();
-    _voice.removeListener(_onVoice);
-    _voice.dispose();
     super.dispose();
   }
 
@@ -200,30 +184,6 @@ class _InputBarState extends ConsumerState<InputBar> {
     }
   }
 
-  Future<void> _startVoice() async {
-    final s = ref.read(settingsProvider).valueOrNull;
-    TencentAsrConfig? tc;
-    if (s != null && s.voiceRecognitionProvider == 'tencent') {
-      tc = TencentAsrConfig(
-        appId: s.tencentAsrAppId,
-        secretId: s.tencentAsrSecretId,
-        secretKey: s.tencentAsrSecretKey,
-        token: s.tencentAsrToken,
-      );
-    }
-    final ok = await _voice.start(tencent: tc);
-    if (!ok && mounted) _snack('语音不可用(检查麦克风/语音识别权限或腾讯凭证)');
-  }
-
-  Future<void> _stopVoice() async {
-    final text = await _voice.stop();
-    if (!mounted) return;
-    if (text.trim().isNotEmpty) {
-      _controller.text = text;
-      setState(() => _voiceMode = false);
-    }
-  }
-
   Future<void> _pickAndUpload() async {
     if (_isDemo) {
       _snack('演示模式:仅供预览');
@@ -324,7 +284,7 @@ class _InputBarState extends ConsumerState<InputBar> {
             // Composer row
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-              child: _voiceMode ? _voiceComposer(theme) : _textComposer(theme),
+              child: _textComposer(theme),
             ),
           ],
         ),
@@ -346,11 +306,6 @@ class _InputBarState extends ConsumerState<InputBar> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _ComposerIcon(
-            icon: Icons.graphic_eq,
-            variant: _ComposerVariant.plain,
-            onTap: () => setState(() => _voiceMode = true),
-          ),
           Expanded(
             child: TextField(
               controller: _controller,
@@ -379,50 +334,6 @@ class _InputBarState extends ConsumerState<InputBar> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _voiceComposer(ThemeData theme) {
-    final listening = _voice.state == VoiceState.listening;
-    return Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.keyboard),
-          tooltip: '键盘输入',
-          onPressed: () => setState(() => _voiceMode = false),
-        ),
-        Expanded(
-          child: GestureDetector(
-            onLongPressStart: (_) => _startVoice(),
-            onLongPressEnd: (_) => _stopVoice(),
-            child: Container(
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: listening
-                    ? theme.colorScheme.primary.withValues(alpha: 0.18)
-                    : AgentPortTheme.softFill(theme.brightness),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: listening
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(listening ? Icons.graphic_eq : Icons.mic,
-                      size: 18, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Text(listening ? '松开结束' : '按住 说话',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 

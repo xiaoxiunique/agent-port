@@ -26,12 +26,6 @@ _AppSettings _$AppSettingsFromJson(Map<String, dynamic> json) => _AppSettings(
           ?.map((e) => e as String)
           .toList() ??
       const [],
-  voiceRecognitionProvider:
-      json['voiceRecognitionProvider'] as String? ?? 'system',
-  tencentAsrAppId: json['tencentAsrAppId'] as String? ?? '',
-  tencentAsrSecretId: json['tencentAsrSecretId'] as String? ?? '',
-  tencentAsrSecretKey: json['tencentAsrSecretKey'] as String? ?? '',
-  tencentAsrToken: json['tencentAsrToken'] as String? ?? '',
 );
 
 Map<String, dynamic> _$AppSettingsToJson(_AppSettings instance) =>
@@ -43,9 +37,4 @@ Map<String, dynamic> _$AppSettingsToJson(_AppSettings instance) =>
       'keepScreenAwake': instance.keepScreenAwake,
       'quickActionButtons': instance.quickActionButtons,
       'pinnedProjects': instance.pinnedProjects,
-      'voiceRecognitionProvider': instance.voiceRecognitionProvider,
-      'tencentAsrAppId': instance.tencentAsrAppId,
-      'tencentAsrSecretId': instance.tencentAsrSecretId,
-      'tencentAsrSecretKey': instance.tencentAsrSecretKey,
-      'tencentAsrToken': instance.tencentAsrToken,
     };

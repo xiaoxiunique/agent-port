@@ -93,7 +93,7 @@ Switching the active server profile cascades: settings → api → snapshot reco
 - `TrayService` — menu-bar tray (`tray_manager`); initialized in `app.dart` via `addPostFrameCallback` (engine must be ready before talking to AppKit). App uses `LSUIElement`.
 - `EnvironmentService` — installs `cc`/`cx` wrappers into `~/.agent-monitor/bin` + `~/.zshrc` PATH.
 
-**Other notable services**: `push_service.dart` (APNs token registration + per-pane notify config), `voice_input_service.dart` / `tencent_asr_service.dart` (speech-to-text for the input bar), `pane_log_service.dart` (`/pane-log/ws` consumer), `terminal_session.dart` (`/terminal/ws` PTY bridge).
+**Other notable services**: `push_service.dart` (APNs token registration + per-pane notify config), `pane_log_service.dart` (`/pane-log/ws` consumer), `terminal_session.dart` (`/terminal/ws` PTY bridge).
 
 ## Project-specific conventions & traps
 
