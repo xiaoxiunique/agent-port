@@ -59,7 +59,6 @@ class MonitorPage extends ConsumerWidget {
       body: snapAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _ErrorState(
-          message: '$e',
           onRetry: () => ref.invalidate(snapshotProvider),
         ),
         data: (snap) => RefreshIndicator(
@@ -461,8 +460,7 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message, required this.onRetry});
-  final String message;
+  const _ErrorState({required this.onRetry});
   final VoidCallback onRetry;
 
   @override
@@ -475,7 +473,20 @@ class _ErrorState extends StatelessWidget {
           children: [
             const Icon(Icons.cloud_off, size: 40),
             const SizedBox(height: 12),
-            Text('连接失败:\n$message', textAlign: TextAlign.center),
+            const Text(
+              '无法连接到该服务器',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '请确认这台设备能访问该地址,或在设置里检查服务器地址。',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 16),
             FilledButton.tonal(onPressed: onRetry, child: const Text('重试')),
           ],

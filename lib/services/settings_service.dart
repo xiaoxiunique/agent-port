@@ -39,13 +39,16 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
           hasCompletedOnboarding: true,
         );
       } else {
-        // Native first launch: the Demo profile (offline sample data) is active
-        // so the app is populated immediately (App Store review + first run),
-        // with the local Mac service one tap away. 'demo' matches demoProfileUrl.
+        // Native first launch: only the offline Demo profile is active, so the
+        // app is fully usable immediately with no server or network (App Store
+        // review + first run). Users add their own Mac service in Settings →
+        // add server. We deliberately do NOT pre-seed a localhost profile: it
+        // would be a dead link on any device that isn't running the service
+        // (e.g. a reviewer's phone), surfacing a connection error. 'demo'
+        // matches demoProfileUrl.
         seeded = const AppSettings(
           profiles: [
             ServerProfile(id: 'demo', name: '演示 Demo', url: 'demo'),
-            ServerProfile(id: 'local', name: 'Mac (local)', url: 'http://127.0.0.1:8797'),
           ],
           activeProfileId: 'demo',
           hasCompletedOnboarding: true,
@@ -60,11 +63,35 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   Future<AppSettings> _load() async {
     final json = _prefs.getString(_profilesKey) ?? '[]';
     final list = jsonDecode(json) as List<dynamic>;
-    final profiles = list
+    var profiles = list
         .map((e) => ServerProfile.fromJson(e as Map<String, dynamic>))
         .toList();
-    final activeId = _prefs.getString(_activeKey) ??
+
+    // One-off migration: older builds pre-seeded a "Mac (local)" profile
+    // pointing at 127.0.0.1:8797. On any device not running the service (e.g. a
+    // fresh install on a phone) that profile is a dead link that surfaces a
+    // connection error, so drop it. Matched narrowly (exact id/name/url) to
+    // avoid touching a localhost profile a user added themselves.
+    final before = profiles.length;
+    profiles = profiles
+        .where((p) => !(p.id == 'local' &&
+            p.name == 'Mac (local)' &&
+            p.url == 'http://127.0.0.1:8797'))
+        .toList();
+    if (profiles.length != before) {
+      await _prefs.setString(
+        _profilesKey,
+        jsonEncode(profiles.map((p) => p.toJson()).toList()),
+      );
+    }
+
+    var activeId = _prefs.getString(_activeKey) ??
         (profiles.isNotEmpty ? profiles.first.id : '');
+    // If the active profile was removed by the migration above, fall back to
+    // the first remaining profile (e.g. Demo).
+    if (activeId.isNotEmpty && !profiles.any((p) => p.id == activeId)) {
+      activeId = profiles.isNotEmpty ? profiles.first.id : '';
+    }
     return AppSettings(
       profiles: profiles,
       activeProfileId: activeId,
