@@ -13,6 +13,7 @@ import 'demo_data.dart';
 /// state machine of the native `MonitorStore`.
 class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>> {
   WebSocketChannel? _socket;
+  StreamSubscription? _sub;
   Timer? _pollTimer;
   Timer? _reconnectTimer;
   bool _disposed = false;
@@ -33,6 +34,15 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>> {
   }
 
   void _connect() {
+    // Fully tear down any previous socket first. Switching profiles reuses this
+    // notifier instance and resets `_disposed`, so a stale server's still-open
+    // stream would keep pushing frames into `state` and make the list flip-flop
+    // between the two servers. Cancelling the subscription (not just closing the
+    // sink) guarantees the old socket's callbacks can never fire again.
+    _sub?.cancel();
+    _sub = null;
+    _socket?.sink.close();
+    _socket = null;
     final api = ref.read(apiProvider);
     try {
       _socket = WebSocketChannel.connect(api.wsUri('/ws'));
@@ -41,7 +51,7 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>> {
       _scheduleReconnect();
       return;
     }
-    _socket!.stream.listen(
+    _sub = _socket!.stream.listen(
       _onData,
       onError: (_) => _onClosed(),
       onDone: _onClosed,
@@ -63,6 +73,8 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>> {
   }
 
   void _onClosed() {
+    _sub?.cancel();
+    _sub = null;
     _socket = null;
     _startPolling();
     _scheduleReconnect();
@@ -106,6 +118,8 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>> {
     _disposed = true;
     _pollTimer?.cancel();
     _reconnectTimer?.cancel();
+    _sub?.cancel();
+    _sub = null;
     _socket?.sink.close();
     _socket = null;
   }
