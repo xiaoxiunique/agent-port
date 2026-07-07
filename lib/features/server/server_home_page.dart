@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../services/environment_service.dart';
 import '../../services/host_service.dart';
+import '../../services/permission_service.dart';
 
 /// macOS server-side main window.
 ///
@@ -60,6 +61,8 @@ class _ServerHomePageState extends ConsumerState<ServerHomePage> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
+            const Divider(height: 40),
+            const _PermissionsCard(),
             const Divider(height: 40),
             const _EnvironmentSection(),
           ],
@@ -329,6 +332,80 @@ class _ActionButtons extends StatelessWidget {
             onPressed: running ? () => host.stopService() : null,
             child: const Text('停止'),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Guides the user through granting Screen Recording, which the control-center
+/// screenshot / window-preview features need (the embedded service shells out
+/// to `screencapture`). Automation is only mentioned — macOS prompts for it on
+/// demand and its status can't be queried reliably.
+class _PermissionsCard extends ConsumerWidget {
+  const _PermissionsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final granted = ref.watch(screenRecordingProvider);
+    final notifier = ref.read(screenRecordingProvider.notifier);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('系统权限', style: theme.textTheme.labelLarge),
+        const SizedBox(height: 4),
+        Text(
+          '控制中心的截图 / 窗口预览需要屏幕录制权限。',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: Icon(
+                  granted ? Icons.check_circle : Icons.warning_amber_rounded,
+                  color: granted ? Colors.green : Colors.orange,
+                ),
+                title: const Text('屏幕录制'),
+                subtitle: Text(granted ? '已授权' : '未授权 — 无法截图 / 预览窗口'),
+                trailing: granted
+                    ? TextButton(
+                        onPressed: () => notifier.refresh(),
+                        child: const Text('重新检测'),
+                      )
+                    : FilledButton.tonal(
+                        onPressed: () => notifier.request(),
+                        child: const Text('去授权'),
+                      ),
+              ),
+              if (!granted)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => notifier.openSettings(),
+                        icon: const Icon(Icons.settings, size: 16),
+                        label: const Text('打开系统设置'),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => notifier.refresh(),
+                        child: const Text('重新检测'),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '提示:首次截图 / 控制其他应用时,macOS 会单独弹出「自动化」授权,点允许即可。'
+          '刚授权屏幕录制后,可能需要重启服务(上方「重启」)才对截图生效。',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
         ),
       ],
     );
