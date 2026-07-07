@@ -329,7 +329,7 @@ class _ServersListPage extends ConsumerWidget {
                 online: profiles[i].id == activeId && reachable,
                 onTap: () => notifier.setActive(profiles[i].id),
                 onEdit: () =>
-                    _push(context, _ServerEditPage(profileId: profiles[i].id)),
+                    _push(context, ServerEditPage(profileId: profiles[i].id)),
               ),
             ],
           ]),
@@ -339,7 +339,7 @@ class _ServersListPage extends ConsumerWidget {
               label: '添加服务器',
               leading: Icons.add,
               accent: true,
-              onTap: () => _push(context, const _ServerEditPage()),
+              onTap: () => _push(context, const ServerEditPage()),
             ),
           ]),
         ],
@@ -788,19 +788,21 @@ class _DeviceRow extends StatelessWidget {
 
 enum _TestState { idle, testing, success, error }
 
-class _ServerEditPage extends ConsumerStatefulWidget {
-  const _ServerEditPage({this.profileId});
+class ServerEditPage extends ConsumerStatefulWidget {
+  const ServerEditPage({super.key, this.profileId});
   final String? profileId;
 
   @override
-  ConsumerState<_ServerEditPage> createState() => _ServerEditPageState();
+  ConsumerState<ServerEditPage> createState() => ServerEditPageState();
 }
 
-class _ServerEditPageState extends ConsumerState<_ServerEditPage> {
+class ServerEditPageState extends ConsumerState<ServerEditPage> {
   final _name = TextEditingController();
-  final _url = TextEditingController();
+  final _host = TextEditingController();
+  final _port = TextEditingController();
   final _token = TextEditingController();
   bool _seeded = false;
+  String _scheme = 'http';
   _TestState _test = _TestState.idle;
   String _testDetail = '未测试';
 
@@ -809,7 +811,8 @@ class _ServerEditPageState extends ConsumerState<_ServerEditPage> {
   @override
   void dispose() {
     _name.dispose();
-    _url.dispose();
+    _host.dispose();
+    _port.dispose();
     _token.dispose();
     super.dispose();
   }
@@ -817,8 +820,41 @@ class _ServerEditPageState extends ConsumerState<_ServerEditPage> {
   void _seedFrom(ServerProfile? p) {
     _seeded = true;
     _name.text = p?.name ?? '';
-    _url.text = p?.url ?? 'http://127.0.0.1:8787';
+    final u = Uri.tryParse(p?.url ?? '');
+    if (u != null && u.host.isNotEmpty) {
+      _scheme = u.scheme.isEmpty ? 'http' : u.scheme;
+      _host.text = u.host;
+      _port.text = u.hasPort ? u.port.toString() : '';
+    } else {
+      _host.text = '127.0.0.1';
+      _port.text = '8787';
+    }
     _token.text = p?.token ?? '';
+  }
+
+  /// Compose the stored URL from the separate address + port fields. Tolerant
+  /// of a full URL or `host:port` pasted straight into the address field.
+  String _composeUrl() {
+    var host = _host.text.trim();
+    var port = _port.text.trim();
+    var scheme = _scheme;
+    if (host.contains('://')) {
+      final u = Uri.tryParse(host);
+      if (u != null && u.host.isNotEmpty) {
+        scheme = u.scheme;
+        host = u.host;
+        if (u.hasPort) port = u.port.toString();
+      }
+    } else {
+      final colon = host.lastIndexOf(':');
+      if (colon > 0 && int.tryParse(host.substring(colon + 1)) != null) {
+        port = host.substring(colon + 1);
+        host = host.substring(0, colon);
+      }
+    }
+    host = host.replaceAll('/', '');
+    if (port.isEmpty) port = '8787';
+    return '$scheme://$host:$port';
   }
 
   Future<void> _testConnection() async {
@@ -827,7 +863,7 @@ class _ServerEditPageState extends ConsumerState<_ServerEditPage> {
       _testDetail = '测试中…';
     });
     final t = _token.text.trim();
-    final api = AgentMonitorApi(baseUrl: _url.text.trim(), token: t.isEmpty ? null : t);
+    final api = AgentMonitorApi(baseUrl: _composeUrl(), token: t.isEmpty ? null : t);
     try {
       final snap = await api.snapshot();
       if (!mounted) return;
@@ -847,12 +883,13 @@ class _ServerEditPageState extends ConsumerState<_ServerEditPage> {
   void _save() {
     final notifier = ref.read(settingsProvider.notifier);
     final t = _token.text.trim();
-    final name =
-        _name.text.trim().isEmpty ? _url.text.trim() : _name.text.trim();
+    final url = _composeUrl();
+    final fallback = Uri.tryParse(url)?.host ?? url;
+    final name = _name.text.trim().isEmpty ? fallback : _name.text.trim();
     final profile = ServerProfile(
       id: widget.profileId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
-      url: _url.text.trim(),
+      url: url,
       token: t.isEmpty ? null : t,
     );
     if (_isNew) {
@@ -911,14 +948,21 @@ class _ServerEditPageState extends ConsumerState<_ServerEditPage> {
       body: ListView(
         children: [
           const SizedBox(height: 12),
+          if (_isNew) const _SetupHint(),
           _Grouped(children: [
             _TextFieldRow(label: '名称', controller: _name, hint: '可选'),
             const _RowDivider(),
             _TextFieldRow(
-                label: 'URL',
-                controller: _url,
-                hint: 'http://…',
+                label: '地址',
+                controller: _host,
+                hint: 'IP 或域名',
                 keyboardType: TextInputType.url),
+            const _RowDivider(),
+            _TextFieldRow(
+                label: '端口',
+                controller: _port,
+                hint: '8787',
+                keyboardType: TextInputType.number),
             const _RowDivider(),
             _TextFieldRow(
                 label: 'Token', controller: _token, hint: '可选', obscure: true),
@@ -938,6 +982,63 @@ class _ServerEditPageState extends ConsumerState<_ServerEditPage> {
               _NavRow(label: '删除服务器', destructive: true, onTap: _delete),
             ]),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Setup guidance shown at the top of the add-server form (new profiles only):
+/// the app can't connect to anything until the user runs a service on their
+/// Mac, so tell them how.
+class _SetupHint extends StatelessWidget {
+  const _SetupHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline, size: 16, color: primary),
+              const SizedBox(width: 6),
+              Text('还没有可连接的服务?',
+                  style:
+                      TextStyle(fontWeight: FontWeight.w600, color: primary)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text('在你的 Mac 上装并运行 amux:', style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 4),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const SelectableText(
+              'brew install amux && amux serve',
+              style: TextStyle(fontFamily: 'monospace', fontSize: 12.5),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('再回这里填这台 Mac 的 IP(局域网或 Tailscale)。详见 amux.cc',
+              style: TextStyle(fontSize: 12, color: muted)),
+          const SizedBox(height: 4),
+          Text('需要「电脑」标签的应用管理 / 截图?改用 Agent Port 的 macOS 版。',
+              style: TextStyle(fontSize: 12, color: muted)),
         ],
       ),
     );

@@ -10,10 +10,11 @@ import '../../data/models/server_profile.dart';
 import '../../data/models/snapshot.dart';
 import '../../data/models/token_usage.dart';
 import '../../services/api_provider.dart';
+import '../../services/demo_data.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
 import '../onboarding/onboarding_view.dart';
-import '../settings/settings_view.dart' show ProjectHistoryPage;
+import '../settings/settings_view.dart' show ProjectHistoryPage, ServerEditPage;
 import 'agent_avatar.dart';
 
 class MonitorPage extends ConsumerWidget {
@@ -53,6 +54,9 @@ class MonitorPage extends ConsumerWidget {
           device: snap?.device,
           onSelect: (id) =>
               ref.read(settingsProvider.notifier).setActive(id),
+          onAddServer: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ServerEditPage()),
+          ),
         ),
         actions: const [_UsageChip(), SizedBox(width: 6)],
       ),
@@ -83,6 +87,7 @@ class _MachineTabBar extends StatelessWidget {
     required this.reachable,
     required this.device,
     required this.onSelect,
+    required this.onAddServer,
   });
 
   final List<ServerProfile> profiles;
@@ -90,19 +95,30 @@ class _MachineTabBar extends StatelessWidget {
   final bool reachable;
   final DeviceInfo? device;
   final ValueChanged<String> onSelect;
+  final VoidCallback onAddServer;
 
   @override
   Widget build(BuildContext context) {
     if (profiles.isEmpty) {
       return const Text('Agent Port');
     }
+    // No real server yet (only the offline Demo) → show a labelled CTA so a
+    // first-time user knows where to connect their own Mac. Once they've added
+    // a real server it collapses to a compact "+".
+    final hasRealServer = profiles.any((p) => p.url != demoProfileUrl);
     return SizedBox(
       height: 44,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: profiles.length,
+        itemCount: profiles.length + 1,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
+          if (i == profiles.length) {
+            return _AddServerChip(
+              expanded: !hasRealServer,
+              onTap: onAddServer,
+            );
+          }
           final p = profiles[i];
           final active = p.id == activeId;
           return _MachineChip(
@@ -113,6 +129,57 @@ class _MachineTabBar extends StatelessWidget {
             onTap: () => onSelect(p.id),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Trailing "add a server" chip in the machine tab bar. Renders as a labelled
+/// "＋ 连接 Mac" CTA when the user has no real server yet, otherwise a compact
+/// "＋". Opens the add-server form.
+class _AddServerChip extends StatelessWidget {
+  const _AddServerChip({required this.expanded, required this.onTap});
+
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final b = theme.brightness;
+    return Material(
+      color: expanded
+          ? theme.colorScheme.primary.withValues(alpha: 0.12)
+          : Colors.transparent,
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: expanded
+              ? theme.colorScheme.primary.withValues(alpha: 0.5)
+              : AgentPortTheme.separator(b),
+        ),
+      ),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add, size: 18, color: theme.colorScheme.primary),
+              if (expanded) ...[
+                const SizedBox(width: 4),
+                Text(
+                  '连接 Mac',
+                  style: TextStyle(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
