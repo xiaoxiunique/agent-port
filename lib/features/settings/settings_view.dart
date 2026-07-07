@@ -1,5 +1,10 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../onboarding/scan_add_flow.dart';
 
 import '../../data/api/agent_monitor_api.dart';
 import '../../data/models/cc_switch.dart';
@@ -335,6 +340,15 @@ class _ServersListPage extends ConsumerWidget {
           ]),
           const SizedBox(height: 16),
           _Grouped(children: [
+            if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) ...[
+              _NavRow(
+                label: '扫码添加',
+                leading: Icons.qr_code_scanner,
+                accent: true,
+                onTap: () => scanAndAddServer(context, ref),
+              ),
+              const _RowDivider(),
+            ],
             _NavRow(
               label: '添加服务器',
               leading: Icons.add,
@@ -789,8 +803,12 @@ class _DeviceRow extends StatelessWidget {
 enum _TestState { idle, testing, success, error }
 
 class ServerEditPage extends ConsumerStatefulWidget {
-  const ServerEditPage({super.key, this.profileId});
+  const ServerEditPage({super.key, this.profileId, this.initialUrl});
   final String? profileId;
+
+  /// When adding a new server, prefill the address fields from this URL (used
+  /// by the scan flow's fallback). Ignored when editing an existing profile.
+  final String? initialUrl;
 
   @override
   ConsumerState<ServerEditPage> createState() => ServerEditPageState();
@@ -820,7 +838,9 @@ class ServerEditPageState extends ConsumerState<ServerEditPage> {
   void _seedFrom(ServerProfile? p) {
     _seeded = true;
     _name.text = p?.name ?? '';
-    final u = Uri.tryParse(p?.url ?? '');
+    // When adding via the scan fallback, seed the address from the scanned URL.
+    final srcUrl = p?.url ?? widget.initialUrl ?? '';
+    final u = Uri.tryParse(srcUrl);
     if (u != null && u.host.isNotEmpty) {
       _scheme = u.scheme.isEmpty ? 'http' : u.scheme;
       _host.text = u.host;

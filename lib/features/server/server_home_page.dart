@@ -46,7 +46,11 @@ class _ServerHomePageState extends ConsumerState<ServerHomePage> {
           children: [
             _StatusCard(state: host.state, reachable: host.isReachable),
             const SizedBox(height: 16),
-            _ConnectionCard(lanUrl: host.lanUrl, localUrl: host.serviceUrl),
+            _ConnectionCard(
+              lanUrl: host.lanUrl,
+              localUrl: host.serviceUrl,
+              tailscaleUrl: host.tailscaleUrl,
+            ),
             const SizedBox(height: 16),
             _ActionButtons(host: host),
             if (host.lastMessage.isNotEmpty) ...[
@@ -88,18 +92,29 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
-/// The address clients connect to. The LAN URL is the one phones/web use; the
-/// QR encodes it so a phone can scan to fill it in. 127.0.0.1 is shown smaller
-/// as a same-machine fallback.
+/// The address clients connect to. When this Mac is on a tailnet the QR encodes
+/// the Tailscale address (works across networks); the LAN address is then shown
+/// as a secondary line. Falls back to the LAN address when there's no tailnet.
+/// 127.0.0.1 is shown smaller as a same-machine fallback.
 class _ConnectionCard extends StatelessWidget {
-  const _ConnectionCard({required this.lanUrl, required this.localUrl});
+  const _ConnectionCard({
+    required this.lanUrl,
+    required this.localUrl,
+    required this.tailscaleUrl,
+  });
   final String? lanUrl;
   final String localUrl;
+  final String? tailscaleUrl;
+
+  /// Strip the scheme for a compact `host:port` display.
+  static String _hostPort(String url) =>
+      url.replaceFirst(RegExp(r'^https?://'), '');
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final url = lanUrl;
+    final primary = tailscaleUrl ?? lanUrl;
+    final isTailscale = tailscaleUrl != null;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -109,17 +124,17 @@ class _ConnectionCard extends StatelessWidget {
             Text('客户端连接地址', style: theme.textTheme.labelLarge),
             const SizedBox(height: 4),
             Text(
-              '手机 / Web 客户端用此地址连接(同一局域网)',
+              '手机 / Web 客户端扫码或填入此地址连接',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.hintColor),
             ),
             const SizedBox(height: 16),
-            if (url == null)
+            if (primary == null)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('正在检测局域网地址…'),
+                child: Text('正在检测连接地址…'),
               )
-            else
+            else ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -130,7 +145,7 @@ class _ConnectionCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: QrImageView(
-                      data: url,
+                      data: primary,
                       size: 132,
                       padding: EdgeInsets.zero,
                     ),
@@ -140,15 +155,41 @@ class _ConnectionCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SelectableText(
-                          url,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: SelectableText(
+                                _hostPort(primary),
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if (isTailscale) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Tailscale',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 8),
                         TextButton.icon(
-                          onPressed: () => _copy(context, url),
+                          onPressed: () => _copy(context, primary),
                           icon: const Icon(Icons.copy, size: 16),
                           label: const Text('复制地址'),
                           style: TextButton.styleFrom(
@@ -163,6 +204,18 @@ class _ConnectionCard extends StatelessWidget {
                   ),
                 ],
               ),
+              // With Tailscale as the primary QR, keep the LAN address reachable
+              // as a secondary same-network option.
+              if (isTailscale && lanUrl != null) ...[
+                const SizedBox(height: 12),
+                _SecondaryAddressRow(
+                  icon: Icons.wifi,
+                  label: '局域网',
+                  url: lanUrl!,
+                  onCopy: () => _copy(context, lanUrl!),
+                ),
+              ],
+            ],
             const Divider(height: 24),
             Row(
               children: [
@@ -204,6 +257,46 @@ class _ConnectionCard extends StatelessWidget {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('已复制')),
+    );
+  }
+}
+
+/// A compact "<label>: host:port  [copy]" line for a secondary connect address.
+class _SecondaryAddressRow extends StatelessWidget {
+  const _SecondaryAddressRow({
+    required this.icon,
+    required this.label,
+    required this.url,
+    required this.onCopy,
+  });
+  final IconData icon;
+  final String label;
+  final String url;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: theme.hintColor),
+        const SizedBox(width: 8),
+        Text('$label:',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+        const SizedBox(width: 6),
+        Expanded(
+          child: SelectableText(
+            _ConnectionCard._hostPort(url),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.hintColor),
+          ),
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.copy, size: 16),
+          onPressed: onCopy,
+        ),
+      ],
     );
   }
 }

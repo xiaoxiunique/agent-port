@@ -1,9 +1,13 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/agent_monitor_api.dart';
 import '../../data/models/server_profile.dart';
 import '../../services/settings_service.dart';
+import 'scan_add_flow.dart';
 
 /// First-run setup: enter a server URL (+ optional token), test the
 /// connection, then save as the first profile and complete onboarding.
@@ -88,6 +92,28 @@ class _OnboardingViewState extends ConsumerState<OnboardingView> {
               Text('输入 Agent Monitor 服务地址(Rust 服务端)。',
                   style: theme.textTheme.bodyMedium),
               const SizedBox(height: 24),
+              if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) ...[
+                FilledButton.tonalIcon(
+                  onPressed: () =>
+                      scanAndAddServer(context, ref, fromOnboarding: true),
+                  icon: const Icon(Icons.qr_code_scanner, size: 18),
+                  label: const Text('扫码连接 Mac'),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Expanded(child: Divider()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text('或手动填写',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.hintColor)),
+                    ),
+                    const Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
               TextField(
                 controller: _url,
                 decoration: const InputDecoration(

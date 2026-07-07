@@ -17,6 +17,7 @@ class HostService extends ChangeNotifier {
   ServiceState _state = ServiceState.idle;
   String _lastMessage = '';
   String? _lanUrl;
+  String? _tailscaleUrl;
 
   static const _port = '8797';
 
@@ -25,6 +26,11 @@ class HostService extends ChangeNotifier {
   String get lastMessage => _lastMessage;
   String get serviceUrl => 'http://127.0.0.1:$_port';
   String? get lanUrl => _lanUrl;
+
+  /// The Tailscale (100.64.0.0/10 CGNAT) address, when this Mac is on a
+  /// tailnet. Preferred over [lanUrl] for the connect QR because it works
+  /// across networks, not just the same LAN.
+  String? get tailscaleUrl => _tailscaleUrl;
   bool get isRunning => _process != null;
 
   // --- Public API ---
@@ -75,6 +81,7 @@ class HostService extends ChangeNotifier {
         _setState(ServiceState.running);
       }
       _lanUrl = await _detectLanUrl();
+      _tailscaleUrl = await _detectTailscaleUrl();
       _startHealthLoop();
     } catch (e) {
       _lastMessage = '$e';
@@ -144,6 +151,33 @@ class HostService extends ChangeNotifier {
         final ip = (r.stdout as String).trim();
         if (ip.isNotEmpty && ip.contains('.') && !ip.startsWith('169.254')) {
           return 'http://$ip:$_port';
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Detect this Mac's Tailscale address by scanning interfaces for an IPv4 in
+  /// the 100.64.0.0/10 CGNAT range that Tailscale assigns (macOS puts it on a
+  /// `utun*` interface). Dependency-free — no reliance on the `tailscale` CLI
+  /// being on PATH.
+  Future<String?> _detectTailscaleUrl() async {
+    if (!Platform.isMacOS) return null;
+    try {
+      final ifaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+      for (final iface in ifaces) {
+        for (final addr in iface.addresses) {
+          final octets = addr.address.split('.');
+          if (octets.length != 4) continue;
+          final a = int.tryParse(octets[0]);
+          final b = int.tryParse(octets[1]);
+          // 100.64.0.0/10 → first octet 100, second octet 64–127.
+          if (a == 100 && b != null && b >= 64 && b <= 127) {
+            return 'http://${addr.address}:$_port';
+          }
         }
       }
     } catch (_) {}
