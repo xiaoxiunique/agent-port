@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 #
-# Xcode build-phase script: bundle the Rust `agent-monitor-service` binary into
-# the macOS app's Resources so the packaged app is self-contained. HostService
-# (lib/services/host_service.dart) spawns the service from
-# `<App>.app/Contents/Resources/agent-monitor-service`.
+# Xcode build-phase script: build the `amux` binary with the `full` feature and
+# bundle it into the macOS app's Resources as `agent-monitor-service`, so the
+# packaged app is self-contained. HostService (lib/services/host_service.dart)
+# spawns it as
+#   <App>.app/Contents/Resources/agent-monitor-service serve --foreground --port 8797
+#
+# The agent-monitor server now lives in the sibling `amux` repo (one core, built
+# with `--features full` for the macOS host extras). Override its location with
+# AMUX_SRC. amux embeds its own web client, so no separate web/ dir is bundled.
 #
 # Runs on every Runner build. Set BUNDLE_RUST_UNIVERSAL=1 (with the
 # x86_64-apple-darwin rust target installed) to emit a universal binary.
@@ -11,12 +16,17 @@ set -euo pipefail
 
 export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-BIN="agent-monitor-service"
-SERVICE_DIR="$SRCROOT/../AgentMonitorService"
+DEST_BIN="agent-monitor-service"     # name the host app expects
+SRC_BIN="amux"                        # what cargo produces
+AMUX_SRC="${AMUX_SRC:-$SRCROOT/../../amux}"
 DEST_DIR="$BUILT_PRODUCTS_DIR/$FULL_PRODUCT_NAME/Contents/Resources"
 
 if ! command -v cargo >/dev/null 2>&1; then
   echo "warning: cargo not found on PATH; skipping Rust service bundling. The app will not be able to host the service." >&2
+  exit 0
+fi
+if [ ! -f "$AMUX_SRC/Cargo.toml" ]; then
+  echo "warning: amux source not found at '$AMUX_SRC' (set AMUX_SRC=/path/to/amux); skipping service bundling." >&2
   exit 0
 fi
 
@@ -24,30 +34,18 @@ mkdir -p "$DEST_DIR"
 
 if [ "${BUNDLE_RUST_UNIVERSAL:-0}" = "1" ] \
    && rustup target list --installed 2>/dev/null | grep -q x86_64-apple-darwin; then
-  echo "Building universal agent-monitor-service (arm64 + x86_64)…"
-  cargo build --release --manifest-path "$SERVICE_DIR/Cargo.toml" --target aarch64-apple-darwin
-  cargo build --release --manifest-path "$SERVICE_DIR/Cargo.toml" --target x86_64-apple-darwin
+  echo "Building universal amux --features full (arm64 + x86_64)…"
+  cargo build --release --features full --manifest-path "$AMUX_SRC/Cargo.toml" --target aarch64-apple-darwin
+  cargo build --release --features full --manifest-path "$AMUX_SRC/Cargo.toml" --target x86_64-apple-darwin
   lipo -create \
-    "$SERVICE_DIR/target/aarch64-apple-darwin/release/$BIN" \
-    "$SERVICE_DIR/target/x86_64-apple-darwin/release/$BIN" \
-    -output "$DEST_DIR/$BIN"
+    "$AMUX_SRC/target/aarch64-apple-darwin/release/$SRC_BIN" \
+    "$AMUX_SRC/target/x86_64-apple-darwin/release/$SRC_BIN" \
+    -output "$DEST_DIR/$DEST_BIN"
 else
-  echo "Building agent-monitor-service (host arch)…"
-  cargo build --release --manifest-path "$SERVICE_DIR/Cargo.toml"
-  cp "$SERVICE_DIR/target/release/$BIN" "$DEST_DIR/$BIN"
+  echo "Building amux --features full (host arch)…"
+  cargo build --release --features full --manifest-path "$AMUX_SRC/Cargo.toml"
+  cp "$AMUX_SRC/target/release/$SRC_BIN" "$DEST_DIR/$DEST_BIN"
 fi
 
-chmod +x "$DEST_DIR/$BIN"
-echo "Bundled $BIN → $DEST_DIR"
-
-# Bundle the Flutter web client next to the binary so the service can serve a
-# zero-install browser UI. Opportunistic: only if `flutter build web` has run.
-WEB_SRC="$SRCROOT/../build/web"
-if [ -d "$WEB_SRC" ]; then
-  rm -rf "$DEST_DIR/web"
-  cp -R "$WEB_SRC" "$DEST_DIR/web"
-  echo "Bundled web client → $DEST_DIR/web"
-else
-  echo "note: $WEB_SRC not found; skipping web client (run 'flutter build web' first to include it)"
-fi
-
+chmod +x "$DEST_DIR/$DEST_BIN"
+echo "Bundled amux (full) → $DEST_DIR/$DEST_BIN"

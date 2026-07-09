@@ -51,8 +51,8 @@ class HostService extends ChangeNotifier {
       final env = Map<String, String>.from(Platform.environment);
       env['PATH'] =
           '/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
-      // Read .env from the project root — the Rust service implicitly depends
-      // on AGENT_MONITOR_PUBLIC_URLS for correct pane.id in snapshots.
+      // Read .env from the project root — the service picks up APNS_* (push),
+      // AGENT_MONITOR_CC/CX_COMMAND, DeepSeek, etc. from the environment.
       env.addAll(await _readDotEnv());
       env['AGENT_MONITOR_HOST'] = '0.0.0.0';
       env['AGENT_MONITOR_PORT'] = _port;
@@ -64,7 +64,14 @@ class HostService extends ChangeNotifier {
         env['AGENT_MONITOR_WEB_DIR'] = webDir;
       }
 
-      _process = await Process.start(binary, [], environment: env);
+      // The service is `amux serve` (built with --features full). It is
+      // flag-driven and would launch a TUI with no args, so pass the subcommand
+      // + port explicitly and run it in the foreground under our supervision.
+      _process = await Process.start(
+        binary,
+        ['serve', '--foreground', '--port', _port],
+        environment: env,
+      );
 
       _process!.stdout.listen(
         (d) => _lastMessage = String.fromCharCodes(d).trim(),
@@ -207,11 +214,12 @@ class HostService extends ChangeNotifier {
         '${appDir.path}/Contents/Resources/agent-monitor-service';
     if (await File(bundlePath).exists()) return bundlePath;
 
-    // 2. Development: walk up from cwd looking for the Cargo.toml.
+    // 2. Development: the amux binary in the sibling repo (built --features
+    //    full). Primary path 1 already covers `flutter run` (the Xcode build
+    //    phase bundles it), so this is a best-effort fallback.
     final root = _findProjectRoot();
     if (root != null) {
-      final devPath =
-          '$root/apps/apple/AgentMonitorService/target/release/agent-monitor-service';
+      final devPath = '$root/../amux/target/release/amux';
       if (await File(devPath).exists()) return devPath;
     }
 
@@ -221,8 +229,7 @@ class HostService extends ChangeNotifier {
   String? _findProjectRoot() {
     var dir = Directory.current;
     for (var i = 0; i < 10; i++) {
-      if (File('${dir.path}/apps/apple/AgentMonitorService/Cargo.toml')
-          .existsSync()) {
+      if (File('${dir.path}/pubspec.yaml').existsSync()) {
         return dir.path;
       }
       final parent = dir.parent;
