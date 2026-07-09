@@ -2,8 +2,10 @@
 
 Local-first monitor and control surface for agent sessions (Claude Code, Codex, …) running in tmux on your Mac.
 
-Ships as two parts in this repo:
-- **`AgentMonitorService/`** — Rust service (Axum + portable-pty + tmux)
+Ships as a Flutter client in this repo; the service it talks to is the
+[`amux`](https://github.com/xiaoxiunique/amux) CLI (Axum + portable-pty + tmux),
+maintained in its own repo and bundled inside the macOS host app:
+- **`amux serve`** — Rust service (the macOS host builds it with `--features full`)
 - **Flutter client** (`lib/`) — one Dart codebase, six platforms (iOS / Android / macOS / Linux / Windows / Web)
 
 ## Features
@@ -25,12 +27,16 @@ Ships as two parts in this repo:
 
 ## Run
 
-**1. Build & start the Rust service** (polls tmux, serves HTTP/WebSocket):
+**1. Install & start the service** (the `amux` CLI — polls tmux, serves HTTP/WebSocket):
 
 ```bash
-cargo run --manifest-path AgentMonitorService/Cargo.toml
-# serves http://0.0.0.0:8787
+brew install amux        # or clone github.com/xiaoxiunique/amux
+amux serve               # serves http://0.0.0.0:8787
 ```
+
+The macOS host app bundles `amux` automatically (built with `--features full`),
+so this step is only needed when running the client against a service you start
+by hand.
 
 **2. Run the Flutter client** (connects to the service):
 
@@ -54,7 +60,7 @@ On first launch, onboarding asks for the service URL (+ optional token).
 ## Architecture
 
 ```
-AgentMonitorService/   Rust service (Axum + portable-pty + tmux): the HTTP/WS API
+amux serve (sibling repo)   Rust service (Axum + portable-pty + tmux): the HTTP/WS API
 lib/                   Flutter client (consumes that API)
 ├── core/            router, theme
 ├── data/

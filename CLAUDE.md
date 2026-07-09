@@ -4,22 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Agent Port is a **local-first monitor and control surface for agent sessions** (Claude Code, Codex, …) running in **tmux** on a Mac. It's two halves in one repo:
+Agent Port is a **local-first monitor and control surface for agent sessions** (Claude Code, Codex, …) running in **tmux** on a Mac. It is the **Flutter client** for that surface; the service it drives is the [`amux`](https://github.com/xiaoxiunique/amux) CLI, maintained in a sibling repo:
 
-- **`AgentMonitorService/`** — Rust service (Axum + portable-pty + tmux). Runs on **each monitored Mac**, polls tmux, serves the HTTP/WebSocket API.
+- **`amux serve` (sibling `amux` repo)** — Rust service (Axum + portable-pty + tmux). Runs on **each monitored Mac**, polls tmux, serves the HTTP/WebSocket API. The macOS host builds it with `--features full` (adds the control-center / usage / APNs-push endpoints) and bundles it as `Contents/Resources/agent-monitor-service`.
 - **`lib/`** — Flutter client (one Dart codebase → iOS / Android / macOS / Linux / Windows / Web). Runs on **any device**, connects to the service over HTTP/WS.
 
-The client is a pure consumer of the Rust API — there is no shared code or codegen between the two halves. tmux is Unix-only, so Linux/Windows clients are remote-only (can't host the service).
+The client is a pure consumer of the Rust API — there is no shared code or codegen between the two halves. tmux is Unix-only, so Linux/Windows clients are remote-only (can't host the service). **This repo no longer contains the Rust server** — it was merged into `amux` (one core, the `full` cargo feature carries the macOS host extras); see `docs/PROJECT_STATUS.md`.
 
 `docs/PROJECT_STATUS.md` (in Chinese) is the living source of truth for feature parity, known issues, and roadmap — **read it before starting non-trivial work**. The reference implementation being ported is the native Swift app in the separate `agent-monitor` repo.
 
 ## Commands
 
-### Rust service
+### Rust service (`amux`, sibling repo)
+The service lives in `../amux`. Build/run it from there; the macOS host needs the
+`full` feature for the control-center / usage / push endpoints:
 ```bash
-cargo run --manifest-path AgentMonitorService/Cargo.toml   # serves http://0.0.0.0:8787
-cargo build --manifest-path AgentMonitorService/Cargo.toml
-cargo clippy --manifest-path AgentMonitorService/Cargo.toml
+cargo run   --manifest-path ../amux/Cargo.toml -- serve   # core, http://0.0.0.0:8787
+cargo build --manifest-path ../amux/Cargo.toml --features full
+cargo clippy --manifest-path ../amux/Cargo.toml --features full
 ```
 
 ### Flutter client
@@ -43,8 +45,10 @@ dart run build_runner watch  --delete-conflicting-outputs   # during model work
 
 ## Architecture
 
-### Rust service (`AgentMonitorService/src/main.rs`, single ~5500-line file)
-Axum router (routes registered in `main()` around line 434). Endpoints:
+### Rust service (`amux`, sibling repo — `amux/src/serve/`)
+Core routes are in `amux/src/serve/server.rs`; the host-only extras (control
+center, usage, push) live in `amux/src/serve/full/` behind `#[cfg(feature = "full")]`.
+Axum router. Endpoints:
 - `GET  /api/snapshot` — current tmux pane list + status
 - `GET  /api/pane/context` — pane tail/scrollback
 - `POST /api/send`, `/api/key` — send text / control keys to a pane
