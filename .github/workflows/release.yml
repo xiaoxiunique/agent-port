@@ -46,8 +46,14 @@ jobs:
 
       - run: flutter pub get
 
+      # rmux is bundled into the .app by bundle_rust_service.sh (it prefers an
+      # installed rmux); install it here so the build phase can copy it.
+      - name: Install rmux (bundled into the app)
+        run: brew install rmux
+
       # Triggers macos/scripts/bundle_rust_service.sh, which cargo-builds amux
-      # (universal, --features full) and copies it into the .app's Resources.
+      # (universal, --features full) and copies it + rmux into the .app's
+      # Resources.
       - name: Build macOS app
         env:
           BUNDLE_RUST_UNIVERSAL: "1"
@@ -62,6 +68,8 @@ jobs:
           # Fail loudly if the Rust service did not make it into the bundle.
           test -x "$APP/Contents/Resources/agent-monitor-service" \
             || { echo "::error::Rust service binary missing from app bundle"; exit 1; }
+          test -x "$APP/Contents/Resources/rmux" \
+            || { echo "::error::rmux binary missing from app bundle"; exit 1; }
           lipo -archs "$APP/Contents/Resources/agent-monitor-service" || true
           mkdir -p dist
           VER="${GITHUB_REF_NAME:-dev}"
@@ -89,6 +97,74 @@ jobs:
             The agent-monitor service (universal arm64+x86_64) is bundled inside
             the app — no extra install needed. The standalone service is
             published separately as the `amux` CLI (`brew install amux`).
+
+  windows-app:
+    name: Windows app (.zip, bundles amux + rmux)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The agent-monitor server lives in the sibling amux repo; on Windows it
+      # is built core-only (the `full` feature is macOS-specific) and bundled by
+      # windows/scripts/bundle_binaries.ps1.
+      - name: Checkout amux (server core)
+        uses: actions/checkout@v4
+        with:
+          repository: xiaoxiunique/amux
+          path: amux
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: amux
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.38.6
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build Windows app
+        run: flutter build windows --release
+
+      # cargo-builds amux.exe + downloads rmux.exe, both next to the Runner.
+      - name: Bundle amux.exe + rmux.exe
+        shell: pwsh
+        run: ./windows/scripts/bundle_binaries.ps1 -AmuxSrc "${{ github.workspace }}\amux"
+
+      - name: Package .zip
+        shell: pwsh
+        run: |
+          $ver = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "dev" }
+          $rel = "build\windows\x64\runner\Release"
+          if (-not (Test-Path "$rel\amux.exe")) { throw "amux.exe missing from bundle" }
+          if (-not (Test-Path "$rel\rmux.exe")) { throw "rmux.exe missing from bundle" }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "$rel\*" -DestinationPath "dist\AgentPort-$ver-windows-x64.zip" -Force
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: dist/*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          body: |
+            ### Windows app
+            `AgentPort-*-windows-x64.zip` is a portable build — unzip and run
+            `agent_port.exe`. It is **not code-signed**, so SmartScreen may warn
+            on first launch (**More info → Run anyway**). `amux.exe` + `rmux.exe`
+            are bundled alongside, so hosting the agent-monitor works with no
+            extra install.
 
   android-apk:
     name: Android APK

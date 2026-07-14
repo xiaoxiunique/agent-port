@@ -6,9 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum ServiceState { idle, starting, running, failed }
 
-/// Manages the Rust agent-monitor-service subprocess (macOS only).
+/// Manages the Rust agent-monitor-service subprocess.
+/// Supported hosts: macOS and Windows (the app bundles both `amux` and `rmux`).
 /// On other platforms all operations are no-ops — the app works as a
-/// remote-only client, which is the intended use for Android/Web/Linux/Windows.
+/// remote-only client, which is the intended use for Android/Web/Linux.
 class HostService extends ChangeNotifier {
   Process? _process;
   Timer? _healthTimer;
@@ -20,6 +21,9 @@ class HostService extends ChangeNotifier {
   String? _tailscaleUrl;
 
   static const _port = '8797';
+
+  /// Platforms where the app can host the Rust service (bundles amux + rmux).
+  static bool get _canHost => Platform.isMacOS || Platform.isWindows;
 
   ServiceState get state => _state;
   bool get isReachable => _isReachable;
@@ -36,7 +40,7 @@ class HostService extends ChangeNotifier {
   // --- Public API ---
 
   Future<void> startService() async {
-    if (!Platform.isMacOS) return;
+    if (!_canHost) return;
     if (_state == ServiceState.running || _state == ServiceState.starting) return;
     _setState(ServiceState.starting);
 
@@ -49,8 +53,16 @@ class HostService extends ChangeNotifier {
 
     try {
       final env = Map<String, String>.from(Platform.environment);
-      env['PATH'] =
-          '/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+      if (Platform.isMacOS) {
+        env['PATH'] =
+            '/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+      }
+      // Drive the bundled rmux so hosting is self-contained (no separate
+      // install). amux's mux_bin() reads AMUX_MUX.
+      final mux = _resolveMuxPath(binary);
+      if (mux != null) {
+        env['AMUX_MUX'] = mux;
+      }
       // Read .env from the project root — the service picks up APNS_* (push),
       // AGENT_MONITOR_CC/CX_COMMAND, DeepSeek, etc. from the environment.
       env.addAll(await _readDotEnv());
@@ -97,11 +109,16 @@ class HostService extends ChangeNotifier {
   }
 
   Future<void> stopService() async {
-    if (!Platform.isMacOS) return;
+    if (!_canHost) return;
     _healthTimer?.cancel();
     _healthTimer = null;
     _autoRestart = false;
-    _process?.kill(ProcessSignal.sigterm);
+    // SIGTERM is unix-only; on Windows the default kill() terminates.
+    if (Platform.isWindows) {
+      _process?.kill();
+    } else {
+      _process?.kill(ProcessSignal.sigterm);
+    }
     await Future<void>.delayed(const Duration(milliseconds: 400));
     _process = null;
     _isReachable = false;
@@ -206,6 +223,22 @@ class HostService extends ChangeNotifier {
   }
 
   Future<String?> _resolveBinaryPath() async {
+    if (Platform.isWindows) {
+      // Production: amux.exe sits next to the Runner .exe (bundled by
+      // windows/scripts/bundle_binaries.ps1).
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final bundled = '$exeDir\\amux.exe';
+      if (await File(bundled).exists()) return bundled;
+      // Development: the sibling amux repo.
+      final root = _findProjectRoot();
+      if (root != null) {
+        final devPath = '$root\\..\\amux\\target\\release\\amux.exe';
+        if (await File(devPath).exists()) return devPath;
+      }
+      return null;
+    }
+
+    // macOS —
     // 1. Production: inside the macOS .app bundle.
     final exe = Platform.resolvedExecutable;
     // Contents/MacOS/<app>  →  go up twice to .app
@@ -224,6 +257,14 @@ class HostService extends ChangeNotifier {
     }
 
     return null;
+  }
+
+  /// Path to the bundled rmux binary (sibling of the service binary), or null
+  /// when not bundled — in which case amux falls back to rmux on PATH.
+  String? _resolveMuxPath(String binaryPath) {
+    final dir = File(binaryPath).parent.path;
+    final mux = Platform.isWindows ? '$dir\\rmux.exe' : '$dir/rmux';
+    return File(mux).existsSync() ? mux : null;
   }
 
   String? _findProjectRoot() {
@@ -260,7 +301,7 @@ class HostService extends ChangeNotifier {
 }
 
 /// Singleton for the host service. Always available; [HostService.startService]
-/// is a no-op on non-macOS platforms.
+/// is a no-op on platforms that can't host (non-macOS/Windows).
 final hostServiceProvider = Provider<HostService>((ref) {
   return HostService();
 });

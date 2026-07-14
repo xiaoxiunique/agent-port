@@ -49,3 +49,47 @@ fi
 
 chmod +x "$DEST_DIR/$DEST_BIN"
 echo "Bundled amux (full) → $DEST_DIR/$DEST_BIN"
+
+# --- Bundle rmux (the multiplexer amux drives) so the app is self-contained.
+# host_service.dart sets AMUX_MUX to this bundled binary at launch.
+RMUX_VERSION="${RMUX_VERSION:-0.8.0}"
+RMUX_DEST="$DEST_DIR/rmux"
+
+bundle_rmux() {
+  # Prefer an already-installed rmux (e.g. Homebrew) to avoid a network hop.
+  local found
+  found="$(command -v rmux || true)"
+  if [ -n "$found" ]; then
+    cp "$found" "$RMUX_DEST"
+    echo "Bundled rmux (from $found) → $RMUX_DEST"
+    return 0
+  fi
+
+  # Otherwise download the prebuilt binary for the host arch.
+  local arch asset tmp
+  case "$(uname -m)" in
+    arm64) arch="aarch64" ;;
+    x86_64) arch="x86_64" ;;
+    *) echo "warning: unknown arch $(uname -m); skipping rmux bundling." >&2; return 0 ;;
+  esac
+  asset="rmux-${RMUX_VERSION}-macos-${arch}.tar.gz"
+  tmp="$(mktemp -d)"
+  if curl -fsSL "https://github.com/helvesec/rmux/releases/download/v${RMUX_VERSION}/${asset}" -o "$tmp/rmux.tgz"; then
+    tar -xzf "$tmp/rmux.tgz" -C "$tmp"
+    local bin
+    bin="$(find "$tmp" -type f -name rmux | head -1)"
+    if [ -n "$bin" ]; then
+      cp "$bin" "$RMUX_DEST"
+      echo "Bundled rmux (downloaded $asset) → $RMUX_DEST"
+    else
+      echo "warning: rmux binary not found in $asset; skipping." >&2
+    fi
+  else
+    echo "warning: failed to download $asset; skipping rmux bundling (app will fall back to PATH)." >&2
+  fi
+  rm -rf "$tmp"
+}
+
+bundle_rmux
+[ -f "$RMUX_DEST" ] && chmod +x "$RMUX_DEST"
+
