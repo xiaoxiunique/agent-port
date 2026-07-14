@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 enum CommandState { installed, managed, missing, conflict }
 
 /// A dev tool the server can detect and one-click install on the host Mac.
-enum DevTool { homebrew, node, tmux, claudeCode, codex }
+enum DevTool { homebrew, node, rmux, claudeCode, codex }
 
 /// Detected state of a [DevTool] for the UI. [blockedReason] is non-null when
 /// the tool is missing and can't be auto-installed yet (e.g. needs Homebrew).
@@ -19,11 +19,11 @@ class ToolInfo {
   final String? blockedReason;
 }
 
-/// Mirrors the native macOS `EnvironmentController`: detects tmux/brew,
-/// manages the `cc`/`cx` tmux wrappers in `~/.agent-monitor/bin`, and the
+/// Mirrors the native macOS `EnvironmentController`: detects rmux/brew,
+/// manages the `cc`/`cx` rmux wrappers in `~/.agent-monitor/bin`, and the
 /// PATH marker in `~/.zshrc`. macOS-only; no-ops elsewhere.
 class EnvironmentService extends ChangeNotifier {
-  String? _tmuxVersion;
+  String? _rmuxVersion;
   String? _brewPath;
   String? _brewVersion;
   String? _nodeVersion;
@@ -36,13 +36,13 @@ class EnvironmentService extends ChangeNotifier {
   DevTool? _installingTool;
   final List<String> _installLog = [];
 
-  String? get tmuxVersion => _tmuxVersion;
+  String? get rmuxVersion => _rmuxVersion;
   String? get brewPath => _brewPath;
   CommandState get ccState => _ccState;
   CommandState get cxState => _cxState;
   bool get isWorking => _isWorking;
   String get lastMessage => _lastMessage;
-  bool get tmuxInstalled => _tmuxVersion != null;
+  bool get rmuxInstalled => _rmuxVersion != null;
   bool get brewInstalled => _brewPath != null && _brewPath!.isNotEmpty;
   DevTool? get installingTool => _installingTool;
   List<String> get installLog => List.unmodifiable(_installLog);
@@ -57,7 +57,7 @@ class EnvironmentService extends ChangeNotifier {
   static String toolLabel(DevTool t) => switch (t) {
         DevTool.homebrew => 'Homebrew',
         DevTool.node => 'Node.js',
-        DevTool.tmux => 'tmux',
+        DevTool.rmux => 'rmux',
         DevTool.claudeCode => 'Claude Code',
         DevTool.codex => 'Codex',
       };
@@ -65,7 +65,7 @@ class EnvironmentService extends ChangeNotifier {
   (bool, String?) _toolState(DevTool t) => switch (t) {
         DevTool.homebrew => (brewInstalled, _brewVersion),
         DevTool.node => (_nodeVersion != null, _nodeVersion),
-        DevTool.tmux => (tmuxInstalled, _tmuxVersion),
+        DevTool.rmux => (rmuxInstalled, _rmuxVersion),
         DevTool.claudeCode => (_claudeVersion != null, _claudeVersion),
         DevTool.codex => (_codexVersion != null, _codexVersion),
       };
@@ -75,11 +75,11 @@ class EnvironmentService extends ChangeNotifier {
 
   Future<void> refresh() async {
     if (!Platform.isMacOS) return;
-    final tmuxPath =
-        await _firstLine('/bin/zsh', ['-lc', 'command -v tmux || true']);
-    _tmuxVersion = tmuxPath == null
+    final rmuxPath =
+        await _firstLine('/bin/zsh', ['-lc', 'command -v rmux || true']);
+    _rmuxVersion = rmuxPath == null
         ? null
-        : await _firstLine('/bin/zsh', ['-lc', 'tmux -V || true']);
+        : await _firstLine('/bin/zsh', ['-lc', 'rmux -V || true']);
     _brewPath = await _firstLine('/bin/zsh', ['-lc', 'command -v brew || true']);
     if (_brewPath?.isEmpty == true) _brewPath = null;
     _brewVersion =
@@ -150,8 +150,8 @@ class EnvironmentService extends ChangeNotifier {
         DevTool.node => brewInstalled
             ? ('brew install node', null)
             : (null, '需先安装 Homebrew'),
-        DevTool.tmux => brewInstalled
-            ? ('brew install tmux', null)
+        DevTool.rmux => brewInstalled
+            ? ('brew install rmux', null)
             : (null, '需先安装 Homebrew'),
         DevTool.claudeCode => (
             'curl -fsSL https://claude.ai/install.sh | bash',
@@ -240,8 +240,8 @@ class EnvironmentService extends ChangeNotifier {
 set -euo pipefail
 # AGENT_MONITOR_WRAPPER @@NAME@@
 
-if ! command -v tmux >/dev/null 2>&1; then
-  echo "Agent Port requires tmux. Install it first: brew install tmux" >&2
+if ! command -v rmux >/dev/null 2>&1; then
+  echo "Agent Port requires rmux. Install it first: brew install rmux" >&2
   exit 1
 fi
 
@@ -251,19 +251,19 @@ hash="$(printf "%s" "$project_dir" | shasum -a 1 | awk '{print substr($1, 1, 8)}
 session="@@NAME@@_${base}_${hash}"
 agent_command="${@@COMMAND_VAR@@:-@@DEFAULT@@}"
 
-if tmux has-session -t "$session" 2>/dev/null; then
+if rmux has-session -t "$session" 2>/dev/null; then
   if [ -n "${TMUX:-}" ]; then
-    exec tmux switch-client -t "$session"
+    exec rmux switch-client -t "$session"
   fi
-  exec tmux attach-session -t "$session"
+  exec rmux attach-session -t "$session"
 fi
 
 if [ -n "${TMUX:-}" ]; then
-  tmux new-session -d -s "$session" -c "$project_dir" "$agent_command"
-  exec tmux switch-client -t "$session"
+  rmux new-session -d -s "$session" -c "$project_dir" "$agent_command"
+  exec rmux switch-client -t "$session"
 fi
 
-exec tmux new-session -s "$session" -c "$project_dir" "$agent_command"
+exec rmux new-session -s "$session" -c "$project_dir" "$agent_command"
 ''';
     final content = template
         .replaceAll('@@NAME@@', name)

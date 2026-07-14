@@ -448,7 +448,7 @@ class _EnvironmentSection extends ConsumerWidget {
           _InstallLog(lines: env.installLog),
         ],
         const SizedBox(height: 20),
-        Text('tmux 启动包装器(cc / cx)', style: theme.textTheme.labelLarge),
+        Text('rmux 启动包装器(cc / cx)', style: theme.textTheme.labelLarge),
         const SizedBox(height: 8),
         Card(
           child: Column(

@@ -156,14 +156,14 @@ class _EnvironmentSectionState extends ConsumerState<_EnvironmentSection> {
               ListTile(
                 dense: true,
                 leading: Icon(
-                  env.tmuxInstalled
+                  env.rmuxInstalled
                       ? Icons.check_circle
                       : Icons.error_outline,
-                  color: env.tmuxInstalled ? Colors.green : Colors.red,
+                  color: env.rmuxInstalled ? Colors.green : Colors.red,
                   size: 20,
                 ),
-                title: const Text('tmux'),
-                subtitle: Text(env.tmuxVersion ?? '未安装'),
+                title: const Text('rmux'),
+                subtitle: Text(env.rmuxVersion ?? '未安装'),
               ),
               ListTile(
                 dense: true,
