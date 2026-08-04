@@ -9,6 +9,7 @@ import '../models/api.dart';
 import '../models/capabilities.dart';
 import '../models/cc_switch.dart';
 import '../models/cron.dart';
+import '../models/files.dart';
 import '../models/notify_config.dart';
 import '../models/pending.dart';
 import '../models/project_history.dart';
@@ -202,6 +203,50 @@ class AgentMonitorApi {
       data: LaunchProjectRequest(path: path, agent: agent).toJson(),
     );
     return ProjectHistoryResponse.fromJson(r.data!);
+  }
+
+  // --- File browsing (read-only) ---
+
+  /// `GET /api/files/roots` — directories the host allows browsing.
+  Future<List<FileRoot>> fileRoots() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/files/roots');
+    return FileRootsResponse.fromJson(r.data!).roots;
+  }
+
+  /// `GET /api/files/list` — one directory's contents.
+  ///
+  /// [showAll] includes dotfiles and build/vendor directories, which are hidden
+  /// by default because a single project can otherwise list tens of thousands
+  /// of files.
+  Future<FileListing> fileList(String path, {bool showAll = false}) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/api/files/list',
+      queryParameters: {'path': path, if (showAll) 'all': 'true'},
+    );
+    return FileListResponse.fromJson(r.data!).listing;
+  }
+
+  /// `GET /api/files/read` — inline text preview.
+  Future<FilePreview> fileRead(String path) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/api/files/read',
+      queryParameters: {'path': path},
+    );
+    return FilePreview.fromJson(r.data!);
+  }
+
+  /// Absolute URL for downloading a file, with the auth token appended when
+  /// set. Handed to the system browser rather than fetched in-process, so
+  /// large artefacts stream straight to the OS downloader.
+  String fileDownloadUrl(String path) {
+    final base = Uri.parse(_dio.options.baseUrl);
+    final uri = base.resolve('/api/files/download').replace(
+      queryParameters: {
+        'path': path,
+        if (_token != null && _token.isNotEmpty) 'token': _token,
+      },
+    );
+    return uri.toString();
   }
 
   // --- Capabilities ---

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme.dart';
 import '../../data/models/cron.dart';
 import '../../services/cron_service.dart';
 import 'cron_job_log_page.dart';
@@ -9,6 +10,10 @@ import 'cron_job_log_page.dart';
 ///
 /// Only reachable when `capabilities.cronbox` is true, so this never has to
 /// render a "CronBox isn't installed" state.
+///
+/// Styling follows the rest of the app (see monitor_page): a grouped grey page
+/// with white rounded cards, hairline strokes in dark mode and a soft shadow in
+/// light — not stock Material list tiles.
 class CronPage extends ConsumerStatefulWidget {
   const CronPage({super.key});
 
@@ -28,32 +33,129 @@ class _CronPageState extends ConsumerState<CronPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('定时任务'),
+        titleSpacing: 16,
+        title: _Segmented(
+          index: _tab,
+          labels: const ['计划', '运行记录'],
+          onChanged: (i) => setState(() => _tab = i),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 20),
             onPressed: _refresh,
             tooltip: '刷新',
           ),
+          const SizedBox(width: 4),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 0, label: Text('计划'), icon: Icon(Icons.schedule)),
-                ButtonSegment(value: 1, label: Text('运行记录'), icon: Icon(Icons.history)),
-              ],
-              selected: {_tab},
-              onSelectionChanged: (s) => setState(() => _tab = s.first),
-            ),
-          ),
-        ),
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: _tab == 0 ? const _SchedulesList() : const _JobsList(),
+      ),
+    );
+  }
+}
+
+/// Pill-shaped segmented control matching the app's iOS look, in place of
+/// Material's [SegmentedButton] (which brings its own outlined styling).
+class _Segmented extends StatelessWidget {
+  const _Segmented({
+    required this.index,
+    required this.labels,
+    required this.onChanged,
+  });
+
+  final int index;
+  final List<String> labels;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final b = theme.brightness;
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AgentPortTheme.elevatedSurface(b).withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AgentPortTheme.separator(b)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            GestureDetector(
+              onTap: () => onChanged(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: i == index
+                      ? AgentPortTheme.surface(b)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: i == index
+                      ? [
+                          BoxShadow(
+                            color: AgentPortTheme.cardShadow(b),
+                            blurRadius: 6,
+                            offset: const Offset(0, 1),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Text(
+                  labels[i],
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight:
+                        i == index ? FontWeight.w600 : FontWeight.w500,
+                    color: i == index
+                        ? theme.colorScheme.onSurface
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The app's standard white rounded card: hairline stroke in dark, soft shadow
+/// in light. Mirrors monitor_page's pane card so the two screens read alike.
+class _Card extends StatelessWidget {
+  const _Card({required this.child, this.onTap});
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = Theme.of(context).brightness;
+    return Material(
+      color: AgentPortTheme.surface(b),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: b == Brightness.dark
+                ? Border.all(color: AgentPortTheme.separator(b))
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: AgentPortTheme.cardShadow(b),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Padding(padding: const EdgeInsets.all(14), child: child),
+        ),
       ),
     );
   }
@@ -67,77 +169,158 @@ class _SchedulesList extends ConsumerWidget {
     final async = ref.watch(cronSchedulesProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => _ErrorView(error: e, onRetry: () => ref.invalidate(cronSchedulesProvider)),
+      error: (e, _) => _ErrorView(
+        error: e,
+        onRetry: () => ref.invalidate(cronSchedulesProvider),
+      ),
       data: (schedules) {
         if (schedules.isEmpty) {
           return const _EmptyView(icon: Icons.schedule, text: '还没有定时任务');
         }
         return ListView.separated(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: 96),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
           itemCount: schedules.length,
-          separatorBuilder: (_, _) => const Divider(height: 1),
-          itemBuilder: (context, i) => _ScheduleTile(schedule: schedules[i]),
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          itemBuilder: (context, i) => _ScheduleCard(schedule: schedules[i]),
         );
       },
     );
   }
 }
 
-class _ScheduleTile extends ConsumerWidget {
-  const _ScheduleTile({required this.schedule});
+class _ScheduleCard extends ConsumerWidget {
+  const _ScheduleCard({required this.schedule});
   final CronSchedule schedule;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final name = schedule.script.split('/').last;
-    return ListTile(
-      leading: Icon(
-        schedule.enabled ? Icons.play_circle : Icons.pause_circle,
-        color: schedule.enabled ? Colors.green : theme.hintColor,
-      ),
-      title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final b = theme.brightness;
+    final on = schedule.enabled;
+    return _Card(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => _ScheduleHistoryPage(schedule: schedule),
+      )),
+      child: Row(
         children: [
-          Text(
-            schedule.cron,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
-              color: theme.colorScheme.primary,
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: (on ? Colors.green : theme.hintColor)
+                  .withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(
+              on ? Icons.schedule : Icons.pause,
+              size: 20,
+              color: on ? Colors.green : theme.hintColor,
             ),
           ),
-          if (schedule.nextRunAt case final next?)
-            Text(
-              schedule.enabled ? '下次 ${_shortTime(next)}' : '已暂停',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  schedule.script.split('/').last,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AgentPortTheme.elevatedSurface(b),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        schedule.cron,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontFamily: 'monospace',
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        on
+                            ? (schedule.nextRunAt == null
+                                ? ''
+                                : '下次 ${_shortTime(schedule.nextRunAt!)}')
+                            : '已暂停',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.hintColor),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
+          ),
+          _ScheduleMenu(schedule: schedule),
         ],
       ),
-      isThreeLine: schedule.nextRunAt != null,
-      trailing: PopupMenuButton<String>(
-        onSelected: (action) => _act(context, ref, action),
-        itemBuilder: (_) => [
-          PopupMenuItem(
-            value: schedule.enabled ? 'disable' : 'enable',
-            child: ListTile(
-              dense: true,
-              leading: Icon(schedule.enabled ? Icons.pause : Icons.play_arrow),
-              title: Text(schedule.enabled ? '暂停' : '启用'),
+    );
+  }
+}
+
+/// Actions for one schedule, presented in a bottom sheet rather than a Material
+/// popup menu — closer to the iOS action-sheet idiom the app uses elsewhere.
+class _ScheduleMenu extends ConsumerWidget {
+  const _ScheduleMenu({required this.schedule});
+  final CronSchedule schedule;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return IconButton(
+      icon: Icon(Icons.more_horiz, color: Theme.of(context).hintColor),
+      onPressed: () => _open(context, ref),
+    );
+  }
+
+  void _open(BuildContext context, WidgetRef ref) {
+    final on = schedule.enabled;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(on ? Icons.pause_circle : Icons.play_circle),
+              title: Text(on ? '暂停' : '启用'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _act(context, ref, on ? 'disable' : 'enable');
+              },
             ),
-          ),
-          const PopupMenuItem(
-            value: 'trigger',
-            child: ListTile(
-              dense: true,
-              leading: Icon(Icons.bolt),
-              title: Text('立即运行'),
+            ListTile(
+              leading: const Icon(Icons.bolt),
+              title: const Text('立即运行'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _act(context, ref, 'trigger');
+              },
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
-      onTap: () => _showHistory(context, schedule),
     );
   }
 
@@ -150,19 +333,13 @@ class _ScheduleTile extends ConsumerWidget {
           'enable' => '已启用',
           'disable' => '已暂停',
           // The run is detached on the host, so this confirms the request, not
-          // the outcome — the job appears in 运行记录 as it progresses.
+          // the outcome — the job shows up in 运行记录 as it progresses.
           _ => '已触发,稍后在运行记录中查看',
         }),
       ));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('操作失败:$e')));
     }
-  }
-
-  void _showHistory(BuildContext context, CronSchedule s) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _ScheduleHistoryPage(schedule: s),
-    ));
   }
 }
 
@@ -180,14 +357,16 @@ class _ScheduleHistoryPage extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _ErrorView(
           error: e,
-          onRetry: () => ref.invalidate(cronJobsForScheduleProvider(schedule.id)),
+          onRetry: () =>
+              ref.invalidate(cronJobsForScheduleProvider(schedule.id)),
         ),
         data: (jobs) => jobs.isEmpty
             ? const _EmptyView(icon: Icons.history, text: '还没有运行记录')
             : ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 itemCount: jobs.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (_, i) => _JobTile(job: jobs[i]),
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (_, i) => _JobCard(job: jobs[i]),
               ),
       ),
     );
@@ -202,25 +381,26 @@ class _JobsList extends ConsumerWidget {
     final async = ref.watch(cronJobsProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => _ErrorView(error: e, onRetry: () => ref.invalidate(cronJobsProvider)),
+      error: (e, _) =>
+          _ErrorView(error: e, onRetry: () => ref.invalidate(cronJobsProvider)),
       data: (jobs) {
         if (jobs.isEmpty) {
           return const _EmptyView(icon: Icons.history, text: '还没有运行记录');
         }
         return ListView.separated(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: 96),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
           itemCount: jobs.length,
-          separatorBuilder: (_, _) => const Divider(height: 1),
-          itemBuilder: (_, i) => _JobTile(job: jobs[i]),
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          itemBuilder: (_, i) => _JobCard(job: jobs[i]),
         );
       },
     );
   }
 }
 
-class _JobTile extends StatelessWidget {
-  const _JobTile({required this.job});
+class _JobCard extends StatelessWidget {
+  const _JobCard({required this.job});
   final CronJob job;
 
   @override
@@ -234,27 +414,64 @@ class _JobTile extends StatelessWidget {
       'cancelled' => (Icons.cancel, theme.hintColor),
       _ => (Icons.remove_circle_outline, theme.hintColor),
     };
-    return ListTile(
-      leading: Icon(icon, color: color),
-      title: Text(
-        job.script.split('/').last,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        [
-          _shortTime(job.createdAt),
-          if (job.durationMs case final ms?) _duration(ms),
-          if (job.error?.isNotEmpty ?? false) job.error!,
-        ].join(' · '),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodySmall,
-      ),
-      trailing: const Icon(Icons.chevron_right, size: 18),
+    final meta = [
+      _shortTime(job.createdAt),
+      if (job.durationMs case final ms?) _duration(ms),
+    ].join(' · ');
+
+    return _Card(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => CronJobLogPage(job: job),
       )),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  job.script.split('/').last,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  meta,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.hintColor),
+                ),
+                if (job.error?.isNotEmpty ?? false) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    job.error!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.error),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right,
+              size: 18, color: theme.colorScheme.outline),
+        ],
+      ),
     );
   }
 }
@@ -271,8 +488,8 @@ class _EmptyView extends StatelessWidget {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
-        const SizedBox(height: 120),
-        Icon(icon, size: 48, color: theme.hintColor),
+        const SizedBox(height: 140),
+        Icon(icon, size: 44, color: theme.hintColor),
         const SizedBox(height: 12),
         Center(child: Text(text, style: TextStyle(color: theme.hintColor))),
       ],
@@ -291,12 +508,14 @@ class _ErrorView extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(24),
       children: [
-        const SizedBox(height: 100),
-        Icon(Icons.cloud_off, size: 48, color: Theme.of(context).hintColor),
+        const SizedBox(height: 120),
+        Icon(Icons.cloud_off, size: 44, color: Theme.of(context).hintColor),
         const SizedBox(height: 12),
         Center(child: Text('读取失败:$error', textAlign: TextAlign.center)),
         const SizedBox(height: 12),
-        Center(child: FilledButton.tonal(onPressed: onRetry, child: const Text('重试'))),
+        Center(
+          child: FilledButton.tonal(onPressed: onRetry, child: const Text('重试')),
+        ),
       ],
     );
   }

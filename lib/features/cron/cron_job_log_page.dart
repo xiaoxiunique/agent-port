@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme.dart';
 import '../../data/models/cron.dart';
 import '../../services/cron_service.dart';
 
@@ -39,7 +40,6 @@ class CronJobLogPage extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Header(job: job),
-          const Divider(height: 1),
           Expanded(
             child: async.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -78,34 +78,76 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final b = theme.brightness;
     final failed = job.status == 'failure';
+    final statusColor = switch (job.status) {
+      'success' => Colors.green,
+      'failure' => theme.colorScheme.error,
+      'running' => Colors.blue,
+      _ => theme.hintColor,
+    };
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Chip(
-                label: Text(job.status),
-                backgroundColor: failed
-                    ? theme.colorScheme.errorContainer
-                    : theme.colorScheme.surfaceContainerHighest,
-                visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Material(
+        color: AgentPortTheme.surface(b),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: b == Brightness.dark
+                ? Border.all(color: AgentPortTheme.separator(b))
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: AgentPortTheme.cardShadow(b),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
               ),
-              const SizedBox(width: 8),
-              if (job.durationMs case final ms?)
-                Text('耗时 ${(ms / 1000).toStringAsFixed(1)}s',
-                    style: theme.textTheme.bodySmall),
             ],
           ),
-          const SizedBox(height: 8),
-          SelectableText(job.script, style: theme.textTheme.bodySmall),
-          if (job.error case final e? when e.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(e, style: TextStyle(color: theme.colorScheme.error)),
-          ],
-        ],
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      job.status,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  if (job.durationMs case final ms?)
+                    Text('耗时 ${(ms / 1000).toStringAsFixed(1)}s',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.hintColor)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SelectableText(
+                job.script,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.hintColor),
+              ),
+              if (failed && (job.error?.isNotEmpty ?? false)) ...[
+                const SizedBox(height: 8),
+                Text(job.error!,
+                    style: TextStyle(color: theme.colorScheme.error)),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
