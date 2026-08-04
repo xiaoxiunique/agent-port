@@ -8,14 +8,14 @@ import '../onboarding/scan_add_flow.dart';
 
 import '../../data/api/agent_monitor_api.dart';
 import '../../data/models/cc_switch.dart';
-import '../../data/models/project_history.dart';
 import '../../data/models/running_app.dart';
 import '../../data/models/server_profile.dart';
-import '../../data/models/usage_daily.dart';
 import '../../services/api_provider.dart';
 import '../../services/demo_data.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
+import 'usage_page.dart';
+import 'widgets/settings_rows.dart';
 
 // ===========================================================================
 // Main settings page — iOS-style master list (label + current value + chevron);
@@ -30,8 +30,8 @@ class SettingsView extends ConsumerWidget {
     final s = ref.watch(settingsProvider).valueOrNull;
     if (s == null) {
       return Scaffold(
-        backgroundColor: _settingsBg(context),
-        appBar: AppBar(title: const Text('Settings')),
+        backgroundColor: settingsBg(context),
+        appBar: AppBar(title: const Text('设置')),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -45,17 +45,17 @@ class SettingsView extends ConsumerWidget {
     }
 
     return Scaffold(
-      backgroundColor: _settingsBg(context),
+      backgroundColor: settingsBg(context),
       appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: _settingsBg(context),
+        title: const Text('设置'),
+        backgroundColor: settingsBg(context),
       ),
       body: ListView(
         padding: const EdgeInsets.only(top: 4, bottom: 100),
         children: [
-          const _SectionHeader('连接'),
-          _Grouped(children: [
-            _Row(
+          const SettingsSectionHeader('连接'),
+          SettingsGrouped(children: [
+            SettingsRow(
               icon: Icons.dns_outlined,
               tint: const Color(0xFF007AFF),
               label: '服务器',
@@ -63,17 +63,17 @@ class SettingsView extends ConsumerWidget {
               onTap: () => _push(context, const _ServersListPage()),
             ),
           ]),
-          const _SectionHeader('监控'),
-          _Grouped(children: [
-            _Row(
+          const SettingsSectionHeader('监控'),
+          SettingsGrouped(children: [
+            SettingsRow(
               icon: Icons.timer_outlined,
               tint: const Color(0xFFFF9500),
               label: '刷新频率',
               value: _refreshLabel(s.refreshInterval),
               onTap: () => _push(context, const _RefreshPage()),
             ),
-            const _RowDivider(),
-            _RowSwitch(
+            const SettingsRowDivider(),
+            SettingsRowSwitch(
               icon: Icons.brightness_high_outlined,
               tint: const Color(0xFF5856D6),
               label: '常亮屏幕',
@@ -81,9 +81,9 @@ class SettingsView extends ConsumerWidget {
               onChanged: notifier.setKeepScreenAwake,
             ),
           ]),
-          const _SectionHeader('输入'),
-          _Grouped(children: [
-            _Row(
+          const SettingsSectionHeader('输入'),
+          SettingsGrouped(children: [
+            SettingsRow(
               icon: Icons.bolt_outlined,
               tint: const Color(0xFF30B0C7),
               label: '快捷按钮',
@@ -91,16 +91,16 @@ class SettingsView extends ConsumerWidget {
               onTap: () => _push(context, const _QuickButtonsPage()),
             ),
           ]),
-          const _SectionHeader('工具'),
-          _Grouped(children: [
-            _Row(
+          const SettingsSectionHeader('工具'),
+          SettingsGrouped(children: [
+            SettingsRow(
               icon: Icons.insights_outlined,
               tint: const Color(0xFF34C759),
               label: '用量统计',
               onTap: () => _push(context, const UsagePage()),
             ),
-            const _RowDivider(),
-            _Row(
+            const SettingsRowDivider(),
+            SettingsRow(
               icon: Icons.hub_outlined,
               tint: const Color(0xFFAF52DE),
               label: 'CC Switch',
@@ -108,8 +108,8 @@ class SettingsView extends ConsumerWidget {
             ),
           ]),
           const SizedBox(height: 24),
-          _Grouped(children: [
-            _Row(
+          SettingsGrouped(children: [
+            SettingsRow(
               icon: Icons.restart_alt,
               tint: const Color(0xFFFF3B30),
               label: '重置设置',
@@ -144,10 +144,6 @@ class SettingsView extends ConsumerWidget {
 
 /// Settings background — a light grey so white cards pop (matches the native
 /// settings aesthetic); follows dark mode.
-Color _settingsBg(BuildContext context) {
-  final b = Theme.of(context).brightness;
-  return b == Brightness.dark ? const Color(0xFF0D0D0F) : const Color(0xFFF2F2F7);
-}
 
 String _refreshLabel(double v) {
   if (v == v.roundToDouble()) return '${v.toInt()}s';
@@ -237,9 +233,9 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
     }
 
     return Scaffold(
-      backgroundColor: _settingsBg(context),
+      backgroundColor: settingsBg(context),
       appBar: AppBar(
-        backgroundColor: _settingsBg(context),
+        backgroundColor: settingsBg(context),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -272,7 +268,7 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(top: 4, bottom: 100),
           children: [
-            _SectionHeader(
+            SettingsSectionHeader(
               '屏幕',
               trailing: IconButton(
                 icon: const Icon(Icons.refresh),
@@ -286,7 +282,7 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
               bust: _screenBust,
               onCapture: _captureScreen,
             ),
-            _SectionHeader(
+            SettingsSectionHeader(
               '运行中的应用',
               trailing: IconButton(
                 icon: const Icon(Icons.refresh),
@@ -317,17 +313,17 @@ class _ServersListPage extends ConsumerWidget {
     final notifier = ref.read(settingsProvider.notifier);
 
     return Scaffold(
-      backgroundColor: _settingsBg(context),
+      backgroundColor: settingsBg(context),
       appBar: AppBar(
         title: const Text('服务器'),
-        backgroundColor: _settingsBg(context),
+        backgroundColor: settingsBg(context),
       ),
       body: ListView(
         padding: const EdgeInsets.only(top: 12, bottom: 32),
         children: [
-          _Grouped(children: [
+          SettingsGrouped(children: [
             for (var i = 0; i < profiles.length; i++) ...[
-              if (i > 0) const _RowDivider(),
+              if (i > 0) const SettingsRowDivider(),
               _DeviceRow(
                 profile: profiles[i],
                 active: profiles[i].id == activeId,
@@ -339,17 +335,17 @@ class _ServersListPage extends ConsumerWidget {
             ],
           ]),
           const SizedBox(height: 16),
-          _Grouped(children: [
+          SettingsGrouped(children: [
             if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) ...[
-              _NavRow(
+              SettingsNavRow(
                 label: '扫码添加',
                 leading: Icons.qr_code_scanner,
                 accent: true,
                 onTap: () => scanAndAddServer(context, ref),
               ),
-              const _RowDivider(),
+              const SettingsRowDivider(),
             ],
-            _NavRow(
+            SettingsNavRow(
               label: '添加服务器',
               leading: Icons.add,
               accent: true,
@@ -378,7 +374,7 @@ class _ScreenCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (bust == 0) {
-      return _Grouped(children: [
+      return SettingsGrouped(children: [
         ListTile(
           leading: const Icon(Icons.desktop_windows_outlined),
           title: const Text('点击截屏'),
@@ -461,7 +457,7 @@ class _AppsList extends StatelessWidget {
       future: future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const _Grouped(children: [
+          return const SettingsGrouped(children: [
             Padding(
               padding: EdgeInsets.all(20),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
@@ -469,7 +465,7 @@ class _AppsList extends StatelessWidget {
           ]);
         }
         if (snap.hasError || snap.data == null || !snap.data!.ok) {
-          return const _Grouped(children: [
+          return const SettingsGrouped(children: [
             Padding(
               padding: EdgeInsets.all(16),
               child: Text('获取失败 — 当前服务端未提供 /api/apps(需更新 Agent Monitor 服务)',
@@ -479,15 +475,15 @@ class _AppsList extends StatelessWidget {
         }
         final apps = snap.data!.apps;
         if (apps.isEmpty) {
-          return const _Grouped(children: [
+          return const SettingsGrouped(children: [
             Padding(
                 padding: EdgeInsets.all(16),
                 child: Text('无运行中的应用')),
           ]);
         }
-        return _Grouped(children: [
+        return SettingsGrouped(children: [
           for (var i = 0; i < apps.length; i++) ...[
-            if (i > 0) const _RowDivider(),
+            if (i > 0) const SettingsRowDivider(),
             _AppRow(app: apps[i], api: api, onQuit: onQuit),
           ],
         ]);
@@ -647,10 +643,10 @@ class _OpenAppPageState extends State<_OpenAppPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _settingsBg(context),
+      backgroundColor: settingsBg(context),
       appBar: AppBar(
         title: const Text('打开应用'),
-        backgroundColor: _settingsBg(context),
+        backgroundColor: settingsBg(context),
       ),
       body: Column(
         children: [
@@ -755,7 +751,7 @@ class _DeviceRow extends StatelessWidget {
       leading: Stack(
         clipBehavior: Clip.none,
         children: [
-          _IconBox(icon: Icons.computer, tint: active ? const Color(0xFF007AFF) : tint),
+          SettingsIconBox(icon: Icons.computer, tint: active ? const Color(0xFF007AFF) : tint),
           if (active)
             Positioned(
               right: -1,
@@ -958,7 +954,7 @@ class ServerEditPageState extends ConsumerState<ServerEditPage> {
     final canDelete = !_isNew && profiles.length > 1;
 
     return Scaffold(
-      backgroundColor: _settingsBg(context),
+      backgroundColor: settingsBg(context),
       appBar: AppBar(
         title: Text(_isNew ? '添加服务器' : '编辑服务器'),
         actions: [
@@ -969,26 +965,26 @@ class ServerEditPageState extends ConsumerState<ServerEditPage> {
         children: [
           const SizedBox(height: 12),
           if (_isNew) const _SetupHint(),
-          _Grouped(children: [
-            _TextFieldRow(label: '名称', controller: _name, hint: '可选'),
-            const _RowDivider(),
-            _TextFieldRow(
+          SettingsGrouped(children: [
+            SettingsTextFieldRow(label: '名称', controller: _name, hint: '可选'),
+            const SettingsRowDivider(),
+            SettingsTextFieldRow(
                 label: '地址',
                 controller: _host,
                 hint: 'IP 或域名',
                 keyboardType: TextInputType.url),
-            const _RowDivider(),
-            _TextFieldRow(
+            const SettingsRowDivider(),
+            SettingsTextFieldRow(
                 label: '端口',
                 controller: _port,
                 hint: '8787',
                 keyboardType: TextInputType.number),
-            const _RowDivider(),
-            _TextFieldRow(
+            const SettingsRowDivider(),
+            SettingsTextFieldRow(
                 label: 'Token', controller: _token, hint: '可选', obscure: true),
           ]),
           const SizedBox(height: 16),
-          _Grouped(children: [
+          SettingsGrouped(children: [
             ListTile(
               leading: const Icon(Icons.wifi_tethering),
               title: const Text('测试连接'),
@@ -998,8 +994,8 @@ class ServerEditPageState extends ConsumerState<ServerEditPage> {
           ]),
           if (canDelete) ...[
             const SizedBox(height: 16),
-            _Grouped(children: [
-              _NavRow(label: '删除服务器', destructive: true, onTap: _delete),
+            SettingsGrouped(children: [
+              SettingsNavRow(label: '删除服务器', destructive: true, onTap: _delete),
             ]),
           ],
         ],
@@ -1105,14 +1101,14 @@ class _RefreshPage extends ConsumerWidget {
         settingsProvider.select((s) => s.valueOrNull?.refreshInterval ?? 2.5));
     final notifier = ref.read(settingsProvider.notifier);
     return Scaffold(
-      backgroundColor: _settingsBg(context),
+      backgroundColor: settingsBg(context),
       appBar: AppBar(title: const Text('刷新频率')),
       body: ListView(
         children: [
           const SizedBox(height: 12),
-          _Grouped(children: [
+          SettingsGrouped(children: [
             for (var i = 0; i < _options.length; i++) ...[
-              if (i > 0) const _RowDivider(),
+              if (i > 0) const SettingsRowDivider(),
               ListTile(
                 title: Text(_refreshLabel(_options[i])),
                 trailing: current == _options[i]
@@ -1148,7 +1144,7 @@ class _QuickButtonsPage extends ConsumerWidget {
     void update(List<String> next) => notifier.setQuickActionButtons(next);
 
     return Scaffold(
-      backgroundColor: _settingsBg(context),
+      backgroundColor: settingsBg(context),
       appBar: AppBar(
         title: const Text('快捷按钮'),
         actions: [
@@ -1161,7 +1157,7 @@ class _QuickButtonsPage extends ConsumerWidget {
       body: ListView(
         children: [
           const SizedBox(height: 12),
-          _Grouped(children: [
+          SettingsGrouped(children: [
             Padding(
               padding: const EdgeInsets.all(12),
               child: Wrap(
@@ -1262,7 +1258,7 @@ class _CcSwitchPageState extends ConsumerState<_CcSwitchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _settingsBg(context),
+      backgroundColor: settingsBg(context),
       appBar: AppBar(
         title: const Text('CC Switch'),
         actions: [
@@ -1286,10 +1282,10 @@ class _CcSwitchPageState extends ConsumerState<_CcSwitchPage> {
           return ListView(
             children: [
               for (final app in apps) ...[
-                _SectionHeader(app.title),
-                _Grouped(children: [
+                SettingsSectionHeader(app.title),
+                SettingsGrouped(children: [
                   for (var i = 0; i < app.providers.length; i++) ...[
-                    if (i > 0) const _RowDivider(),
+                    if (i > 0) const SettingsRowDivider(),
                     ListTile(
                       leading: Icon(
                         app.providers[i].isCurrent
@@ -1322,641 +1318,7 @@ class _CcSwitchPageState extends ConsumerState<_CcSwitchPage> {
 // Sub-page: Usage statistics
 // ===========================================================================
 
-String _fmtTok(int n) {
-  if (n >= 1000000000) return '${(n / 1e9).toStringAsFixed(1)}B';
-  if (n >= 1000000) return '${(n / 1e6).toStringAsFixed(1)}M';
-  if (n >= 1000) return '${(n / 1e3).toStringAsFixed(1)}K';
-  return '$n';
-}
 
-String _money(double v) => '\$${v.toStringAsFixed(2)}';
 
 /// Usage detail: all-time total, today, and a per-day Claude + Codex breakdown.
 /// Backed by `GET /api/usage/daily` (ccusage). Reached from Settings → 用量统计.
-class UsagePage extends ConsumerWidget {
-  const UsagePage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(usageDailyProvider);
-    return Scaffold(
-      backgroundColor: _settingsBg(context),
-      appBar: AppBar(title: const Text('用量统计')),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _UsageHint('读取用量失败：$e'),
-        data: (u) {
-          if (!u.ok) {
-            return const _UsageHint('服务端未能获取用量数据。\n请确认主机已安装 ccusage（bunx ccusage）。');
-          }
-          final today = u.days.isNotEmpty ? u.days.first : null;
-          return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(usageDailyProvider),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              children: [
-                const _UsageSection('总共'),
-                _TotalCard(u: u),
-                const SizedBox(height: 22),
-                _UsageSection(today != null ? '当日 · ${today.date}' : '当日'),
-                if (today != null)
-                  _DayCard(day: today, emphasize: true)
-                else
-                  const _UsageHint('今日暂无用量'),
-                const SizedBox(height: 22),
-                const _UsageSection('每天'),
-                ...u.days.map((d) => _DayCard(day: d)),
-                if (u.days.isEmpty) const _UsageHint('暂无历史用量'),
-                const SizedBox(height: 16),
-                Text(
-                  '成本为 ccusage 按 API 单价估算，订阅 / Max 套餐下仅供参考。',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).hintColor,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _UsageSection extends StatelessWidget {
-  const _UsageSection(this.title);
-  final String title;
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).hintColor,
-          ),
-        ),
-      );
-}
-
-class _UsageHint extends StatelessWidget {
-  const _UsageHint(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Center(
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Theme.of(context).hintColor),
-          ),
-        ),
-      );
-}
-
-/// Card backing for usage rows — white (or dark) rounded surface.
-class _UsageCard extends StatelessWidget {
-  const _UsageCard({required this.child});
-  final Widget child;
-  @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: dark ? const Color(0xFF1C1C1E) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: child,
-    );
-  }
-}
-
-/// All-time total: grand total cost + Claude / Codex split.
-class _TotalCard extends StatelessWidget {
-  const _TotalCard({required this.u});
-  final UsageDaily u;
-  @override
-  Widget build(BuildContext context) {
-    return _UsageCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                _money(u.totalCost),
-                style: const TextStyle(
-                    fontSize: 30, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(width: 8),
-              Text('总消费',
-                  style: TextStyle(
-                      fontSize: 13, color: Theme.of(context).hintColor)),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _AgentLine(
-            label: 'Claude',
-            color: const Color(0xFFD97757),
-            cost: u.claude.cost,
-            tokens: u.claude.totalTokens,
-          ),
-          const SizedBox(height: 8),
-          _AgentLine(
-            label: 'Codex',
-            color: const Color(0xFF10A37F),
-            cost: u.codex.cost,
-            tokens: u.codex.totalTokens,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One day's spend: date header + Claude / Codex split. `emphasize` enlarges
-/// the total for the "today" card.
-class _DayCard extends StatelessWidget {
-  const _DayCard({required this.day, this.emphasize = false});
-  final DayUsage day;
-  final bool emphasize;
-  @override
-  Widget build(BuildContext context) {
-    return _UsageCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                day.date,
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600),
-              ),
-              const Spacer(),
-              Text(
-                _money(day.totalCost),
-                style: TextStyle(
-                  fontSize: emphasize ? 22 : 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _AgentLine(
-            label: 'Claude',
-            color: const Color(0xFFD97757),
-            cost: day.claudeCost,
-            tokens: day.claudeTokens,
-            compact: true,
-          ),
-          const SizedBox(height: 6),
-          _AgentLine(
-            label: 'Codex',
-            color: const Color(0xFF10A37F),
-            cost: day.codexCost,
-            tokens: day.codexTokens,
-            compact: true,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A single agent's line: colored dot · name · tokens (right: cost).
-class _AgentLine extends StatelessWidget {
-  const _AgentLine({
-    required this.label,
-    required this.color,
-    required this.cost,
-    required this.tokens,
-    this.compact = false,
-  });
-  final String label;
-  final Color color;
-  final double cost;
-  final int tokens;
-  final bool compact;
-  @override
-  Widget build(BuildContext context) {
-    final hint = Theme.of(context).hintColor;
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 54,
-          child: Text(label,
-              style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w500)),
-        ),
-        Text('${_fmtTok(tokens)} tok',
-            style: TextStyle(fontSize: 12, color: hint)),
-        const Spacer(),
-        Text(_money(cost),
-            style: TextStyle(
-              fontSize: compact ? 13 : 14,
-              fontWeight: FontWeight.w600,
-              color: cost > 0 ? null : hint,
-            )),
-      ],
-    );
-  }
-}
-
-// ===========================================================================
-// Sub-page: Project history
-// ===========================================================================
-
-/// Recent-projects picker: pick a past project and launch Claude/Codex on it.
-/// Reached from the home list's "添加项目" entry. Public so the monitor feature
-/// can reuse it.
-class ProjectHistoryPage extends ConsumerStatefulWidget {
-  const ProjectHistoryPage({super.key});
-  @override
-  ConsumerState<ProjectHistoryPage> createState() => _ProjectHistoryPageState();
-}
-
-class _ProjectHistoryPageState extends ConsumerState<ProjectHistoryPage> {
-  Future<ProjectHistoryResponse>? _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _load();
-  }
-
-  Future<ProjectHistoryResponse> _load() {
-    if (ref.read(demoModeProvider)) {
-      return Future.value(
-          ProjectHistoryResponse(ok: true, projects: demoProjects()));
-    }
-    return ref.read(apiProvider).projectHistory();
-  }
-
-  void _reload() => setState(() => _future = _load());
-
-  Future<void> _launch(String path, String agent) async {
-    if (ref.read(demoModeProvider)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('演示模式下无法启动项目')),
-      );
-      return;
-    }
-    try {
-      await ref.read(apiProvider).launchProject(path: path, agent: agent);
-      _reload();
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('已启动:$agent @ $path')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('启动失败: $e')));
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _settingsBg(context),
-      appBar: AppBar(
-        title: const Text('项目历史'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _reload),
-        ],
-      ),
-      body: FutureBuilder<ProjectHistoryResponse>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError || snap.data == null) {
-            return const Center(
-                child: Text('暂不可用', style: TextStyle(color: Colors.grey)));
-          }
-          final projects = snap.data!.projects;
-          if (projects.isEmpty) {
-            return const Center(child: Text('暂无项目'));
-          }
-          return ListView(
-            children: [
-              const SizedBox(height: 12),
-              _Grouped(children: [
-                for (var i = 0; i < projects.length; i++) ...[
-                  if (i > 0) const _RowDivider(),
-                  ListTile(
-                    title: Text(projects[i].name),
-                    subtitle: Text(projects[i].path,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.terminal),
-                          tooltip: 'Claude',
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () => _launch(projects[i].path, 'claude'),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.code),
-                          tooltip: 'Codex',
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () => _launch(projects[i].path, 'codex'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ]),
-              const SizedBox(height: 32),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ===========================================================================
-// Shared building blocks
-// ===========================================================================
-
-/// Grouped-form section header (uppercase, secondary).
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.text, {this.trailing});
-  final String text;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 22, trailing == null ? 20 : 8, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.4,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
-  }
-}
-
-/// A row that shows a label, an optional current value, and a chevron; drills
-/// into a sub-page on tap. Mirrors iOS Settings rows.
-class _NavRow extends StatelessWidget {
-  const _NavRow({
-    required this.label,
-    this.onTap,
-    this.leading,
-    this.destructive = false,
-    this.accent = false,
-  });
-
-  final String label;
-  final VoidCallback? onTap;
-  final IconData? leading;
-  final bool destructive;
-  final bool accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final labelColor = destructive
-        ? Colors.red
-        : accent
-            ? theme.colorScheme.primary
-            : theme.colorScheme.onSurface;
-    return ListTile(
-      leading: leading == null
-          ? null
-          : Icon(leading, color: labelColor, size: 22),
-      title: Text(label, style: TextStyle(color: labelColor)),
-      trailing: destructive
-          ? null
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(width: 6),
-                Icon(Icons.chevron_right,
-                    size: 20, color: theme.colorScheme.outline),
-              ],
-            ),
-      onTap: onTap,
-    );
-  }
-}
-
-/// A row inside a grouped settings card: icon + label + current value +
-/// chevron. (Destructive variant: red, no value/chevron.)
-class _Row extends StatelessWidget {
-  const _Row({
-    required this.icon,
-    required this.tint,
-    required this.label,
-    this.value,
-    this.onTap,
-    this.destructive = false,
-  });
-
-  final IconData icon;
-  final Color tint;
-  final String label;
-  final String? value;
-  final VoidCallback? onTap;
-  final bool destructive;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListTile(
-      onTap: onTap,
-      leading: _IconBox(icon: icon, tint: destructive ? Colors.red : tint),
-      title: Text(label,
-          style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: destructive ? Colors.red : theme.colorScheme.onSurface)),
-      trailing: destructive
-          ? null
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (value != null)
-                  Flexible(
-                    child: Text(value!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 15,
-                            color: theme.colorScheme.onSurfaceVariant)),
-                  ),
-                const SizedBox(width: 6),
-                Icon(Icons.chevron_right,
-                    size: 20, color: theme.colorScheme.outline),
-              ],
-            ),
-    );
-  }
-}
-
-/// A row inside a grouped settings card with a trailing switch.
-class _RowSwitch extends StatelessWidget {
-  const _RowSwitch({
-    required this.icon,
-    required this.tint,
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final IconData icon;
-  final Color tint;
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListTile(
-      onTap: () => onChanged(!value),
-      leading: _IconBox(icon: icon, tint: tint),
-      title: Text(label,
-          style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: theme.colorScheme.onSurface)),
-      trailing: Switch(value: value, onChanged: onChanged),
-    );
-  }
-}
-
-/// Rounded icon chip used on the left of a settings row.
-class _IconBox extends StatelessWidget {
-  const _IconBox({required this.icon, required this.tint});
-  final IconData icon;
-  final Color tint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        color: tint.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(icon, size: 19, color: tint),
-    );
-  }
-}
-
-/// Inline label + right-aligned editable value row (for forms).
-class _TextFieldRow extends StatelessWidget {
-  const _TextFieldRow({
-    required this.label,
-    required this.controller,
-    this.hint,
-    this.obscure = false,
-    this.keyboardType,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final String? hint;
-  final bool obscure;
-  final TextInputType? keyboardType;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          SizedBox(width: 92, child: Text(label)),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              obscureText: obscure,
-              keyboardType: keyboardType,
-              autocorrect: false,
-              textAlign: TextAlign.right,
-              decoration: InputDecoration(
-                hintText: hint,
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 1px inset divider between grouped rows.
-class _RowDivider extends StatelessWidget {
-  const _RowDivider();
-  @override
-  Widget build(BuildContext context) =>
-      const Divider(height: 1, indent: 16, endIndent: 0);
-}
-
-/// A rounded elevated card holding sub-page rows (white on grey, subtle shadow).
-class _Grouped extends StatelessWidget {
-  const _Grouped({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(
-                alpha: theme.brightness == Brightness.dark ? 0.0 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-        border: theme.brightness == Brightness.dark
-            ? Border.all(color: theme.dividerColor)
-            : null,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(children: children),
-    );
-  }
-}

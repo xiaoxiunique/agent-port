@@ -2,9 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
 
+String? _sessionAgentAlias(String session) {
+  final underscore = session.indexOf('_');
+  if (underscore <= 0) return null;
+  final prefix = session.substring(0, underscore);
+  final dash = prefix.indexOf('-');
+  final alias = dash > 0 ? prefix.substring(0, dash) : prefix;
+  return switch (alias) {
+    'cc' || 'cx' => alias,
+    _ => null,
+  };
+}
+
 /// Brand avatar for an agent session, keyed off the tmux session prefix
-/// (`cc_` → Claude, `cx_` → Codex, else a generic terminal glyph). Mirrors the
-/// native `AgentAvatar` (MonitorView.swift:1183-1223).
+/// (`cc[_|-provider_]` → Claude, `cx[_|-provider_]` → Codex, else a generic
+/// terminal glyph). Mirrors the native `AgentAvatar` (MonitorView.swift:1183-1223).
 class AgentAvatar extends StatelessWidget {
   const AgentAvatar({super.key, required this.session, this.size = 48});
 
@@ -17,13 +29,14 @@ class AgentAvatar extends StatelessWidget {
     final radius = BorderRadius.circular(size * 0.16);
 
     Widget child;
-    if (session.startsWith('cc_')) {
+    final alias = _sessionAgentAlias(session);
+    if (alias == 'cc') {
       child = Container(
         color: AgentPortTheme.elevatedSurface(brightness),
         padding: EdgeInsets.all(size * 0.1),
         child: Image.asset('assets/claude-avatar.png', fit: BoxFit.contain),
       );
-    } else if (session.startsWith('cx_')) {
+    } else if (alias == 'cx') {
       child = Container(
         color: AgentPortTheme.elevatedSurface(brightness),
         padding: EdgeInsets.all(size * 0.06),

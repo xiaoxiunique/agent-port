@@ -14,7 +14,8 @@ import '../../services/demo_data.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
 import '../onboarding/onboarding_view.dart';
-import '../settings/settings_view.dart' show ProjectHistoryPage, ServerEditPage;
+import '../settings/project_history_page.dart' show ProjectHistoryPage;
+import '../settings/settings_view.dart' show ServerEditPage;
 import 'agent_avatar.dart';
 
 class MonitorPage extends ConsumerWidget {

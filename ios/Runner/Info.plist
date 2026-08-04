@@ -54,5 +54,11 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fleamarket</string>
+		<string>taobao</string>
+		<string>alipays</string>
+	</array>
 </dict>
 </plist>

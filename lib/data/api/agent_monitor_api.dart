@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../models/agent_event.dart';
 import '../models/api.dart';
+import '../models/capabilities.dart';
 import '../models/cc_switch.dart';
+import '../models/cron.dart';
 import '../models/notify_config.dart';
 import '../models/pending.dart';
 import '../models/project_history.dart';
@@ -202,8 +204,76 @@ class AgentMonitorApi {
     return ProjectHistoryResponse.fromJson(r.data!);
   }
 
-  // --- CC Switch ---
+  // --- Capabilities ---
 
+  /// `GET /api/capabilities` — which optional tools the host has.
+  ///
+  /// Returns all-false when the service predates this endpoint, so an older
+  /// host degrades to "no optional features" instead of erroring.
+  Future<Capabilities> capabilities() async {
+    try {
+      final r = await _dio.get<Map<String, dynamic>>('/api/capabilities');
+      return CapabilitiesResponse.fromJson(r.data!).capabilities;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return const Capabilities();
+      rethrow;
+    }
+  }
+
+  // --- CronBox scheduled jobs ---
+
+  /// `GET /api/cron/schedules`
+  Future<List<CronSchedule>> cronSchedules() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/cron/schedules');
+    return CronSchedulesResponse.fromJson(r.data!).schedules;
+  }
+
+  /// `GET /api/cron/jobs` — recent runs, newest first.
+  Future<List<CronJob>> cronJobs({
+    int? limit,
+    String? status,
+    String? scheduleId,
+  }) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/api/cron/jobs',
+      queryParameters: {
+        'limit': ?limit,
+        'status': ?status,
+        'scheduleId': ?scheduleId,
+      },
+    );
+    return CronJobsResponse.fromJson(r.data!).jobs;
+  }
+
+  /// `GET /api/cron/jobs/running`
+  Future<List<CronJob>> cronRunningJobs() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/cron/jobs/running');
+    return CronJobsResponse.fromJson(r.data!).jobs;
+  }
+
+  /// `GET /api/cron/log?id=` — one job's captured output.
+  Future<CronLogResponse> cronLog(String jobId) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/api/cron/log',
+      queryParameters: {'id': jobId},
+    );
+    return CronLogResponse.fromJson(r.data!);
+  }
+
+  /// `POST /api/cron/action` — `enable`, `disable`, `cancel` or `trigger`.
+  ///
+  /// `enable`/`disable`/`trigger` take a schedule id; `cancel` takes a job id.
+  Future<void> cronAction({
+    required String action,
+    required String id,
+  }) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/api/cron/action',
+      data: {'action': action, 'id': id},
+    );
+  }
+
+  // --- CC Switch ---
   /// `GET /api/cc-switch`
   Future<CcSwitchStatusResponse> ccSwitchStatus() async {
     final r = await _dio.get<Map<String, dynamic>>('/api/cc-switch');

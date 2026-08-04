@@ -16,7 +16,7 @@ import '../../services/settings_service.dart';
 enum RuntimeMode { log, terminal }
 
 /// Unified bottom input bar. Mirrors the native `InputBar`
-/// (PaneDetailSheet.swift): an accessory row (provider pill / Goal / Keys /
+/// (PaneDetailSheet.swift): an accessory row (provider pill / Resume / Keys /
 /// More) above a composer (text field + image + send). Voice input is omitted
 /// (it needs a native ASR plugin).
 class InputBar extends ConsumerStatefulWidget {
@@ -42,7 +42,6 @@ class InputBar extends ConsumerStatefulWidget {
 class _InputBarState extends ConsumerState<InputBar> {
   final _controller = TextEditingController();
   bool _sending = false;
-  bool _goalMode = false;
   bool _vimMode = false;
 
   Future<CcSwitchStatusResponse>? _ccFuture;
@@ -66,11 +65,6 @@ class _InputBarState extends ConsumerState<InputBar> {
 
   String get _ccAppType => widget.pane.isCodexPane ? 'codex' : 'claude';
 
-  /// `/goal` wrapper, verbatim from native `goalModeText(for:)`
-  /// (PaneDetailSheet.swift:3223).
-  String _goalText(String text) =>
-      '/goal\n请使用 goal 模式，先创建一个 goal，然后持续推进直到完成或明确阻塞：\n\n$text';
-
   Future<void> _send() async {
     final raw = _controller.text.trim();
     if (raw.isEmpty || _sending) return;
@@ -79,25 +73,21 @@ class _InputBarState extends ConsumerState<InputBar> {
       return;
     }
     HapticFeedback.lightImpact();
-    final goal = _goalMode;
-    setState(() {
-      _sending = true;
-      _goalMode = false;
-    });
+    setState(() => _sending = true);
     try {
       final api = ref.read(apiProvider);
-      final payload = goal ? _goalText(raw) : raw;
-      await api.send(SendRequest(
-        paneId: widget.pane.id,
-        text: payload,
-        submitKey: widget.pane.sendSubmitKey,
-        vimMode: _vimMode,
-      ));
+      await api.send(
+        SendRequest(
+          paneId: widget.pane.id,
+          text: raw,
+          submitKey: widget.pane.sendSubmitKey,
+          vimMode: _vimMode,
+        ),
+      );
       _controller.clear();
       ref.invalidate(pendingProvider(widget.pane.id));
     } catch (e) {
       if (mounted) {
-        setState(() => _goalMode = goal);
         _snack('发送失败: $e');
       }
     } finally {
@@ -105,19 +95,26 @@ class _InputBarState extends ConsumerState<InputBar> {
     }
   }
 
-  Future<void> _sendPreset(String text) async {
+  Future<void> _sendResume() => _sendPreset('/resume', submitKey: 'Enter');
+
+  Future<void> _sendPreset(String text, {String? submitKey}) async {
+    if (_sending) return;
     if (_isDemo) {
       _snack('演示模式:仅供预览');
       return;
     }
     setState(() => _sending = true);
     try {
-      await ref.read(apiProvider).send(SendRequest(
-            paneId: widget.pane.id,
-            text: text,
-            submitKey: widget.pane.sendSubmitKey,
-            vimMode: _vimMode,
-          ));
+      await ref
+          .read(apiProvider)
+          .send(
+            SendRequest(
+              paneId: widget.pane.id,
+              text: text,
+              submitKey: submitKey ?? widget.pane.sendSubmitKey,
+              vimMode: _vimMode,
+            ),
+          );
       ref.invalidate(pendingProvider(widget.pane.id));
     } catch (e) {
       if (mounted) _snack('发送失败: $e');
@@ -251,7 +248,7 @@ class _InputBarState extends ConsumerState<InputBar> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Divider(height: 1, color: AgentPortTheme.separator(theme.brightness)),
-            // Accessory row (provider pill / Goal / Keys / More)
+            // Accessory row (provider pill / Resume / Keys / More)
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 5, 8, 3),
               child: SizedBox(
@@ -262,16 +259,13 @@ class _InputBarState extends ConsumerState<InputBar> {
                     _ProviderPill(
                       appType: _ccAppType,
                       future: _ccFuture,
-                      onSwitch: _switchProvider,
-                      onRefresh: () => setState(() =>
-                          _ccFuture = ref.read(apiProvider).ccSwitchStatus()),
+                      onOpen: _openProviderSheet,
                     ),
                     const SizedBox(width: 6),
                     _AccessoryButton(
-                      icon: Icons.adjust,
-                      label: _goalMode ? 'Goal on' : 'Goal',
-                      selected: _goalMode,
-                      onTap: () => setState(() => _goalMode = !_goalMode),
+                      icon: Icons.play_circle_outline,
+                      label: 'Resume',
+                      onTap: _sendResume,
                     ),
                     const SizedBox(width: 6),
                     _keysMenu(isClaude),
@@ -356,6 +350,69 @@ class _InputBarState extends ConsumerState<InputBar> {
     ('↓', 'Down'),
     ('⌫', 'BSpace'),
   ];
+
+  void _openProviderSheet(CcSwitchApp? app) {
+    final providers = app?.providers ?? const <CcSwitchProvider>[];
+    _showSheet(
+      title: '切换 Provider',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _ActionChip(
+                icon: Icons.refresh,
+                label: '刷新',
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(
+                    () => _ccFuture = ref.read(apiProvider).ccSwitchStatus(),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '当前 ${app?.title ?? _ccAppType}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (providers.isEmpty)
+            Text(
+              '暂无可用 provider',
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final p in providers)
+                  _ProviderOptionChip(
+                    provider: p,
+                    onTap: p.isCurrent || !p.hasApiKey
+                        ? null
+                        : () {
+                            Navigator.pop(context);
+                            _switchProvider(p.id);
+                          },
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
 
   void _openKeysSheet(bool isClaude) {
     _showSheet(
@@ -538,27 +595,21 @@ class _AccessoryButton extends StatelessWidget {
   const _AccessoryButton({
     required this.icon,
     required this.label,
-    this.selected = false,
     this.onTap,
   });
 
   final IconData icon;
   final String label;
-  final bool selected;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final b = theme.brightness;
-    final fg = selected
-        ? Colors.white
-        : theme.colorScheme.onSurface.withValues(alpha: 0.82);
-    final fill = selected
-        ? theme.colorScheme.primary
-        : (b == Brightness.dark
-            ? Colors.white.withValues(alpha: 0.10)
-            : Colors.black.withValues(alpha: 0.05));
+    final fg = theme.colorScheme.onSurface.withValues(alpha: 0.82);
+    final fill = b == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.black.withValues(alpha: 0.05);
     return Material(
       color: fill,
       borderRadius: BorderRadius.circular(8),
@@ -652,14 +703,12 @@ class _ProviderPill extends StatelessWidget {
   const _ProviderPill({
     required this.appType,
     required this.future,
-    required this.onSwitch,
-    required this.onRefresh,
+    required this.onOpen,
   });
 
   final String appType;
   final Future<CcSwitchStatusResponse>? future;
-  final ValueChanged<String> onSwitch;
-  final VoidCallback onRefresh;
+  final ValueChanged<CcSwitchApp?> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -685,87 +734,150 @@ class _ProviderPill extends StatelessWidget {
         }
         final providerName = current?.name ?? '—';
 
-        return PopupMenuButton<String>(
-          tooltip: '切换 provider',
-          onSelected: (v) {
-            if (v == '__refresh__') {
-              onRefresh();
-            } else {
-              onSwitch(v);
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: '__refresh__', child: Text('刷新')),
-            const PopupMenuDivider(),
-            for (final p in app?.providers ?? const <CcSwitchProvider>[])
-              PopupMenuItem(
-                value: p.id,
-                enabled: !p.isCurrent && p.hasApiKey,
-                child: Row(
-                  children: [
-                    Icon(
-                      p.isCurrent
-                          ? Icons.check_circle
-                          : Icons.radio_button_off,
-                      size: 18,
-                      color: p.isCurrent ? Colors.green : null,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(p.name),
-                  ],
-                ),
+        return Material(
+          color: b == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.13)
+              : Colors.black.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(8),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => onOpen(app),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 88, maxWidth: 150),
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 9),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AgentPortTheme.separator(b)),
               ),
-          ],
-          child: Container(
-            constraints: const BoxConstraints(minWidth: 88, maxWidth: 150),
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 9),
-            decoration: BoxDecoration(
-              color: b == Brightness.dark
-                  ? Colors.white.withValues(alpha: 0.13)
-                  : Colors.black.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AgentPortTheme.separator(b)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.hub, size: 14, color: theme.colorScheme.onSurface),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(appType,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.hub, size: 14, color: theme.colorScheme.onSurface),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          appType,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              fontSize: 9,
-                              height: 1.1,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurfaceVariant)),
-                      Text(providerName,
+                            fontSize: 9,
+                            height: 1.1,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        Text(
+                          providerName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              fontSize: 12,
-                              height: 1.1,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.84))),
-                    ],
+                            fontSize: 12,
+                            height: 1.1,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.84,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.unfold_more,
-                    size: 12, color: theme.colorScheme.onSurfaceVariant),
-              ],
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.unfold_more,
+                    size: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class _ProviderOptionChip extends StatelessWidget {
+  const _ProviderOptionChip({required this.provider, this.onTap});
+
+  final CcSwitchProvider provider;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final b = theme.brightness;
+    final selected = provider.isCurrent;
+    final enabled = onTap != null;
+    final fg = selected
+        ? Colors.white
+        : theme.colorScheme.onSurface.withValues(alpha: enabled ? 0.86 : 0.38);
+    final bg = selected
+        ? theme.colorScheme.primary
+        : (b == Brightness.dark
+              ? Colors.white.withValues(alpha: enabled ? 0.10 : 0.05)
+              : Colors.black.withValues(alpha: enabled ? 0.05 : 0.03));
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 240),
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? theme.colorScheme.primary
+                  : AgentPortTheme.separator(b),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                selected ? Icons.check_circle : Icons.radio_button_off,
+                size: 16,
+                color: fg,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  provider.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                  ),
+                ),
+              ),
+              if (!provider.hasApiKey) ...[
+                const SizedBox(width: 6),
+                Text(
+                  '未配置',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -836,8 +948,8 @@ class _ActionChip extends StatelessWidget {
     final fg = destructive
         ? Colors.red
         : selected
-            ? Colors.white
-            : theme.colorScheme.onSurface;
+        ? Colors.white
+        : theme.colorScheme.onSurface;
     final bg = selected
         ? accent
         : (b == Brightness.dark

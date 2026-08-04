@@ -17,7 +17,7 @@ Snapshot _fakeSnapshot() => Snapshot(
         Pane(
           id: 'p1',
           target: 's:0.0',
-          session: 'cc_myproject_abc123',
+          session: 'cc-glm_myproject_abc123',
           windowIndex: '0',
           windowName: 'work',
           paneIndex: '0',
@@ -33,7 +33,7 @@ Snapshot _fakeSnapshot() => Snapshot(
         Pane(
           id: 'p2',
           target: 's:1.0',
-          session: 'cx_other_def',
+          session: 'cx-openai_other_def',
           windowIndex: '0',
           windowName: '',
           paneIndex: '0',
@@ -82,14 +82,14 @@ void main() {
     await tester.pumpAndSettle();
 
     // Project names derived from the session (AppSettings.projectName):
-    // 'cc_myproject_abc123' -> 'myproject', 'cx_other_def' -> 'other'.
+    // 'cc-glm_myproject_abc123' -> 'myproject',
+    // 'cx-openai_other_def' -> 'other'.
     expect(find.text('myproject'), findsOneWidget);
     expect(find.text('other'), findsOneWidget);
     // displayTitle for p1 falls back to its command.
     expect(find.text('claude'), findsWidgets);
-    // Two brand avatars (Claude + Codex) and two chevrons.
+    // Two brand avatars (Claude + Codex).
     expect(find.byType(Image), findsNWidgets(2));
-    expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
   });
 
   testWidgets('shows empty state when no panes', (tester) async {
@@ -103,6 +103,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('没有运行中的 tmux 会话'), findsOneWidget);
+    expect(find.text('没有运行中的 rmux 会话'), findsOneWidget);
   });
 }

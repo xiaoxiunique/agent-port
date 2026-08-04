@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/api/agent_monitor_api.dart';
+import '../data/models/capabilities.dart';
 import '../data/models/pending.dart';
 import '../data/models/token_usage.dart';
 import '../data/models/usage_daily.dart';
@@ -31,6 +32,32 @@ final apiProvider = Provider<AgentMonitorApi>((ref) {
   return AgentMonitorApi(
     baseUrl: kIsWeb ? Uri.base.origin : 'http://127.0.0.1:8797',
   );
+});
+
+/// Which optional tools the host has (CronBox, CC Switch, herdr, `full`
+/// build). Lets the UI hide features this machine can't do instead of showing
+/// them and failing on tap.
+///
+/// Kept alive (not autoDispose) because it's read from several screens and the
+/// answer only changes when the host restarts. Demo mode reports everything on
+/// so the sample UI is complete.
+final capabilitiesProvider = FutureProvider<Capabilities>((ref) async {
+  if (ref.watch(demoModeProvider)) {
+    return const Capabilities(
+      cronbox: true,
+      ccSwitch: true,
+      full: true,
+      herdr: HerdrCapability(installed: true, enabled: true),
+      platform: 'macos',
+    );
+  }
+  try {
+    return await ref.watch(apiProvider).capabilities();
+  } catch (_) {
+    // Unreachable host or an old service: assume nothing optional is present
+    // rather than blocking the UI on an error.
+    return const Capabilities();
+  }
 });
 
 /// Total Claude Code + Codex token usage (server-side ccusage, cached ~5 min).

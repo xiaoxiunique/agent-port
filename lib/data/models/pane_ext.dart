@@ -1,6 +1,18 @@
 import 'enums.dart';
 import 'pane.dart';
 
+String? _sessionAgentAlias(String session) {
+  final underscore = session.indexOf('_');
+  if (underscore <= 0) return null;
+  final prefix = session.substring(0, underscore);
+  final dash = prefix.indexOf('-');
+  final alias = dash > 0 ? prefix.substring(0, dash) : prefix;
+  return switch (alias) {
+    'cc' || 'cx' => alias,
+    _ => null,
+  };
+}
+
 /// Display helpers ported verbatim from the native iOS app
 /// (`AppSettings.projectName`, `PaneListItem.cleanTitle/displayTitle`,
 /// `sortedWorkSessions`). Kept as pure functions so both the list and the
@@ -38,23 +50,22 @@ extension PaneDisplay on Pane {
     return session;
   }
 
-  /// True for Codex panes. The session prefix is **authoritative**: `cx_` is
-  /// Codex, and `cc_` is Claude Code that is NEVER treated as Codex even if the
-  /// word "codex" happens to appear in its terminal output. Only when neither
-  /// prefix is present do we fall back to the *stable* session/command text —
-  /// never the volatile title/tail, which would flicker the result frame to
-  /// frame as content scrolls.
+  /// True for Codex panes. The amux session prefix is authoritative: `cx_` and
+  /// `cx-provider_` are Codex; `cc_` and `cc-provider_` are Claude Code.
+  /// Only when no known amux prefix is present do we fall back to stable
+  /// session/command text — never volatile title/tail.
   bool get isCodexPane {
-    if (session.startsWith('cc_')) return false;
-    if (session.startsWith('cx_')) return true;
+    final alias = _sessionAgentAlias(session);
+    if (alias == 'cc') return false;
+    if (alias == 'cx') return true;
     return '$session\n$command'.toLowerCase().contains('codex');
   }
 
   /// Submit key for `/api/send` (Pane.swift:107): Tab for Codex, else Enter.
   String get sendSubmitKey => isCodexPane ? 'Tab' : 'Enter';
 
-  /// True for Claude Code panes (session prefix `cc_`).
-  bool get isClaudePane => session.startsWith('cc_');
+  /// True for Claude Code panes (session prefix `cc_` or `cc-provider_`).
+  bool get isClaudePane => _sessionAgentAlias(session) == 'cc';
 }
 
 /// Human-readable status label (RealtimeLogPanel header / status pills).

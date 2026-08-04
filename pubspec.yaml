@@ -1,7 +1,7 @@
 name: agent_port
 description: "Agent Port — Flutter client for Agent Monitor (tmux agent session monitor & control)."
 publish_to: 'none'
-version: 1.1.3+26
+version: 1.1.3+34
 
 environment:
   sdk: ^3.10.7
@@ -23,7 +23,7 @@ dependencies:
 
   # Models / codegen annotations
   freezed_annotation: ^3.1.0
-  json_annotation: ^4.9.0
+  json_annotation: ^4.12.0
   xterm: ^4.0.0
   shared_preferences: ^2.5.5
   tray_manager: ^0.5.3
@@ -34,12 +34,20 @@ dependencies:
   native_glass_navbar: ^1.0.2
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.0.0
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  # Codegen. These must be real dev_dependencies, not just overrides: builders
+  # are applied via `auto_apply: dependents`, so listing them only under
+  # dependency_overrides pins the version without making this package a
+  # dependent — build_runner then finds no builders and writes 0 outputs.
+  build_runner: ^2.4.13
+  freezed: ^3.1.0
+  json_serializable: ^6.9.0
 
 dependency_overrides:
   # Codegen
