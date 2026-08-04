@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
 import '../../data/models/usb_device.dart';
+import '../../services/api_provider.dart';
 import '../../services/usb_service.dart';
 
 /// USB devices physically connected to the host.
@@ -58,31 +59,42 @@ class UsbDevicesPage extends ConsumerWidget {
   }
 }
 
-class _DeviceCard extends StatelessWidget {
+bool _isPhone(UsbDevice d) =>
+    ['xiao', 'samsung', 'apple inc', 'iphone', 'huawei', 'oppo',
+      'vivo', 'oneplus', 'google', 'pixel', 'motorola', 'redmi']
+        .any((k) => d.vendor.toLowerCase().contains(k));
+
+class _DeviceCard extends ConsumerWidget {
   const _DeviceCard({required this.device});
   final UsbDevice device;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final b = theme.brightness;
-    final isPhone = ['xiao', 'samsung', 'apple inc', 'iphone', 'huawei', 'oppo',
-          'vivo', 'oneplus', 'google', 'pixel', 'motorola', 'redmi']
-        .any((k) => device.vendor.toLowerCase().contains(k));
+    final isPhone = _isPhone(device);
+    final canCapture = isPhone && device.serial != null;
 
     return Material(
       color: AgentPortTheme.surface(b),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: device.serial != null
-            ? () {
-                Clipboard.setData(ClipboardData(text: device.serial!));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('序列号已复制')),
-                );
-              }
-            : null,
+        onTap: canCapture
+            ? () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => _ScreenshotView(
+                    url: ref.read(apiProvider).usbScreenshotUrl(device.serial!),
+                    label: device.product,
+                  ),
+                ))
+            : (device.serial != null
+                ? () {
+                    Clipboard.setData(ClipboardData(text: device.serial!));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('序列号已复制')),
+                    );
+                  }
+                : null),
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -152,10 +164,54 @@ class _DeviceCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (device.serial != null)
-                  Icon(Icons.copy,
-                      size: 16, color: theme.colorScheme.outline),
+                if (canCapture)
+                  Icon(Icons.screenshot_monitor,
+                      size: 20, color: theme.colorScheme.primary),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Full-screen screenshot viewer (pinch-to-zoom, black background).
+class _ScreenshotView extends StatelessWidget {
+  const _ScreenshotView({required this.url, required this.label});
+  final String url;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('$label 截图'),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 5,
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white70,
+                  value: progress.expectedTotalBytes == null
+                      ? null
+                      : progress.cumulativeBytesLoaded /
+                          progress.expectedTotalBytes!,
+                ),
+              );
+            },
+            errorBuilder: (_, e, s) => const Center(
+              child: Text('截图加载失败', style: TextStyle(color: Colors.white70)),
             ),
           ),
         ),

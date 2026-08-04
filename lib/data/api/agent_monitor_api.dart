@@ -349,6 +349,18 @@ class AgentMonitorApi {
     return UsbDevicesResponse.fromJson(r.data!);
   }
 
+  /// Absolute URL for a USB device screenshot, with the auth token appended
+  /// when set. The client renders this directly — it returns raw PNG bytes.
+  String usbScreenshotUrl(String serial) {
+    final base = Uri.parse(_dio.options.baseUrl);
+    return base.resolve('/api/usb/screenshot').replace(
+      queryParameters: {
+        'serial': serial,
+        if (_token != null && _token.isNotEmpty) 'token': _token,
+      },
+    ).toString();
+  }
+
   // --- Machine monitor (macOS host) ---
 
   /// `GET /api/usage` — total Claude Code + Codex token usage (via ccusage).
