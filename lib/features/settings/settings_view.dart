@@ -14,6 +14,7 @@ import '../../services/api_provider.dart';
 import '../../services/demo_data.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
+import '../usb/usb_devices_page.dart';
 import 'usage_page.dart';
 import 'widgets/settings_rows.dart';
 
@@ -73,6 +74,14 @@ class SettingsView extends ConsumerWidget {
               label: '电脑控制',
               value: '截图 / 应用',
               onTap: () => _push(context, const DevicesPage()),
+            ),
+            const SettingsRowDivider(),
+            SettingsRow(
+              icon: Icons.usb_outlined,
+              tint: const Color(0xFF007AFF),
+              label: 'USB 设备',
+              value: '已连接',
+              onTap: () => _push(context, const UsbDevicesPage()),
             ),
             const SettingsRowDivider(),
             SettingsRow(

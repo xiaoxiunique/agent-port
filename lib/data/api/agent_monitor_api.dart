@@ -16,6 +16,7 @@ import '../models/project_history.dart';
 import '../models/running_app.dart';
 import '../models/snapshot.dart';
 import '../models/token_usage.dart';
+import '../models/usb_device.dart';
 import '../models/usage_daily.dart';
 
 /// The platform this client runs on, sent as `x-agent-port-source` so the
@@ -335,6 +336,17 @@ class AgentMonitorApi {
       data: CcSwitchSwitchRequest(appType: appType, providerId: providerId).toJson(),
     );
     return CcSwitchStatusResponse.fromJson(r.data!);
+  }
+
+  // --- USB devices (macOS host) ---
+
+  /// `GET /api/usb/devices` — phones and other USB devices on the host.
+  ///
+  /// Only available on macOS (uses `ioreg`); returns an empty list on other
+  /// platforms with `available: false`.
+  Future<UsbDevicesResponse> usbDevices() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/usb/devices');
+    return UsbDevicesResponse.fromJson(r.data!);
   }
 
   // --- Machine monitor (macOS host) ---
