@@ -54,6 +54,7 @@ _FilePreview _$FilePreviewFromJson(Map<String, dynamic> json) => _FilePreview(
   text: json['text'] as bool? ?? false,
   content: json['content'] as String? ?? '',
   size: (json['size'] as num?)?.toInt() ?? 0,
+  media: json['media'] as String?,
   reason: json['reason'] as String?,
 );
 
@@ -62,6 +63,7 @@ Map<String, dynamic> _$FilePreviewToJson(_FilePreview instance) =>
       'text': instance.text,
       'content': instance.content,
       'size': instance.size,
+      'media': instance.media,
       'reason': instance.reason,
     };
 

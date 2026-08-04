@@ -220,7 +220,7 @@ class _EntryCard extends StatelessWidget {
                       if (!entry.isDir) ...[
                         const SizedBox(height: 2),
                         Text(
-                          _humanSize(entry.size),
+                          humanSize(entry.size),
                           style: theme.textTheme.bodySmall
                               ?.copyWith(color: theme.hintColor),
                         ),
@@ -315,7 +315,8 @@ Future<void> downloadEntry(
   }
 }
 
-String _humanSize(int bytes) {
+/// Shared by the preview page.
+String humanSize(int bytes) {
   if (bytes < 1024) return '$bytes B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
   if (bytes < 1024 * 1024 * 1024) {

@@ -4,14 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
 import '../../data/models/files.dart';
+import '../../services/api_provider.dart';
 import '../../services/file_service.dart';
 import 'file_browser_page.dart';
 
-/// Inline preview of one file, with a download fallback.
+/// Inline preview of one file.
 ///
-/// The host only returns text it considers previewable — UTF-8 and under its
-/// size cap. Anything else comes back flagged, and this offers the download
-/// instead of rendering mojibake.
+/// Three shapes, decided by the host: text renders inline, images and video
+/// render from the download URL (which serves the correct content type), and
+/// anything else offers a download.
 class FilePreviewPage extends ConsumerWidget {
   const FilePreviewPage({super.key, required this.entry});
   final FileEntry entry;
@@ -20,18 +21,23 @@ class FilePreviewPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final async = ref.watch(filePreviewProvider(entry.path));
+    final preview = async.valueOrNull;
+    final isImage = preview?.media == 'image';
 
     return Scaffold(
+      // Images read better against black, like a photo viewer.
+      backgroundColor: isImage ? Colors.black : null,
       appBar: AppBar(
+        backgroundColor: isImage ? Colors.black : null,
+        foregroundColor: isImage ? Colors.white : null,
         title: Text(entry.name, overflow: TextOverflow.ellipsis),
         actions: [
-          if (async.valueOrNull?.text ?? false)
+          if (preview?.text ?? false)
             IconButton(
               tooltip: '复制',
               icon: const Icon(Icons.copy, size: 20),
               onPressed: () {
-                Clipboard.setData(
-                    ClipboardData(text: async.value!.content));
+                Clipboard.setData(ClipboardData(text: preview!.content));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('已复制')),
                 );
@@ -53,9 +59,98 @@ class FilePreviewPage extends ConsumerWidget {
             child: Text('无法读取:$e', textAlign: TextAlign.center),
           ),
         ),
-        data: (preview) => preview.text
-            ? _TextBody(content: preview.content)
-            : _NotPreviewable(preview: preview, entry: entry, theme: theme),
+        data: (p) => switch (p.media) {
+          'image' => _ImageBody(entry: entry),
+          'video' => _VideoBody(entry: entry, size: p.size),
+          _ => p.text
+              ? _TextBody(content: p.content)
+              : _NotPreviewable(preview: p, entry: entry, theme: theme),
+        },
+      ),
+    );
+  }
+}
+
+/// Pinch-to-zoom image, streamed from the download endpoint.
+class _ImageBody extends ConsumerWidget {
+  const _ImageBody({required this.entry});
+  final FileEntry entry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final url = ref.read(apiProvider).fileDownloadUrl(entry.path);
+    return Center(
+      child: InteractiveViewer(
+        minScale: 0.8,
+        maxScale: 5,
+        child: Image.network(
+          url,
+          fit: BoxFit.contain,
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) return child;
+            final total = progress.expectedTotalBytes;
+            return Center(
+              child: CircularProgressIndicator(
+                value: total == null
+                    ? null
+                    : progress.cumulativeBytesLoaded / total,
+              ),
+            );
+          },
+          errorBuilder: (context, _, _) => _Failed(
+            entry: entry,
+            message: '图片加载失败',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Video hands off to the system player rather than embedding one: these
+/// projects hold four video files, which doesn't justify a player dependency
+/// (and the extra iOS build surface that comes with it).
+class _VideoBody extends ConsumerWidget {
+  const _VideoBody({required this.entry, required this.size});
+  final FileEntry entry;
+  final int size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                color: AgentPortTheme.elevatedSurface(theme.brightness),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(Icons.play_circle_outline,
+                  size: 32, color: theme.colorScheme.primary),
+            ),
+            const SizedBox(height: 16),
+            Text(entry.name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Text(
+              humanSize(size),
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: () => downloadEntry(context, ref, entry),
+              icon: const Icon(Icons.play_arrow, size: 18),
+              label: const Text('播放'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -83,6 +178,31 @@ class _TextBody extends StatelessWidget {
             height: 1.45,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _Failed extends ConsumerWidget {
+  const _Failed({required this.entry, required this.message});
+  final FileEntry entry;
+  final String message;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.broken_image, size: 44, color: Colors.white54),
+          const SizedBox(height: 12),
+          Text(message, style: const TextStyle(color: Colors.white70)),
+          const SizedBox(height: 16),
+          FilledButton.tonal(
+            onPressed: () => downloadEntry(context, ref, entry),
+            child: const Text('下载'),
+          ),
+        ],
       ),
     );
   }
@@ -127,7 +247,7 @@ class _NotPreviewable extends ConsumerWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              _humanSize(preview.size),
+              humanSize(preview.size),
               style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
             ),
             const SizedBox(height: 20),
@@ -141,13 +261,4 @@ class _NotPreviewable extends ConsumerWidget {
       ),
     );
   }
-}
-
-String _humanSize(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  if (bytes < 1024 * 1024 * 1024) {
-    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
-  }
-  return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
 }

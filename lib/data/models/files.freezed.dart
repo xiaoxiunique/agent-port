@@ -844,7 +844,8 @@ as bool,
 /// @nodoc
 mixin _$FilePreview {
 
- bool get text; String get content; int get size; String? get reason;
+ bool get text; String get content; int get size;/// `image` or `video` when the file can be displayed directly.
+ String? get media; String? get reason;
 /// Create a copy of FilePreview
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -857,16 +858,16 @@ $FilePreviewCopyWith<FilePreview> get copyWith => _$FilePreviewCopyWithImpl<File
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is FilePreview&&(identical(other.text, text) || other.text == text)&&(identical(other.content, content) || other.content == content)&&(identical(other.size, size) || other.size == size)&&(identical(other.reason, reason) || other.reason == reason));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is FilePreview&&(identical(other.text, text) || other.text == text)&&(identical(other.content, content) || other.content == content)&&(identical(other.size, size) || other.size == size)&&(identical(other.media, media) || other.media == media)&&(identical(other.reason, reason) || other.reason == reason));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,text,content,size,reason);
+int get hashCode => Object.hash(runtimeType,text,content,size,media,reason);
 
 @override
 String toString() {
-  return 'FilePreview(text: $text, content: $content, size: $size, reason: $reason)';
+  return 'FilePreview(text: $text, content: $content, size: $size, media: $media, reason: $reason)';
 }
 
 
@@ -877,7 +878,7 @@ abstract mixin class $FilePreviewCopyWith<$Res>  {
   factory $FilePreviewCopyWith(FilePreview value, $Res Function(FilePreview) _then) = _$FilePreviewCopyWithImpl;
 @useResult
 $Res call({
- bool text, String content, int size, String? reason
+ bool text, String content, int size, String? media, String? reason
 });
 
 
@@ -894,12 +895,13 @@ class _$FilePreviewCopyWithImpl<$Res>
 
 /// Create a copy of FilePreview
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? text = null,Object? content = null,Object? size = null,Object? reason = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? text = null,Object? content = null,Object? size = null,Object? media = freezed,Object? reason = freezed,}) {
   return _then(_self.copyWith(
 text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
 as bool,content: null == content ? _self.content : content // ignore: cast_nullable_to_non_nullable
 as String,size: null == size ? _self.size : size // ignore: cast_nullable_to_non_nullable
-as int,reason: freezed == reason ? _self.reason : reason // ignore: cast_nullable_to_non_nullable
+as int,media: freezed == media ? _self.media : media // ignore: cast_nullable_to_non_nullable
+as String?,reason: freezed == reason ? _self.reason : reason // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }
@@ -985,10 +987,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool text,  String content,  int size,  String? reason)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool text,  String content,  int size,  String? media,  String? reason)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _FilePreview() when $default != null:
-return $default(_that.text,_that.content,_that.size,_that.reason);case _:
+return $default(_that.text,_that.content,_that.size,_that.media,_that.reason);case _:
   return orElse();
 
 }
@@ -1006,10 +1008,10 @@ return $default(_that.text,_that.content,_that.size,_that.reason);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool text,  String content,  int size,  String? reason)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool text,  String content,  int size,  String? media,  String? reason)  $default,) {final _that = this;
 switch (_that) {
 case _FilePreview():
-return $default(_that.text,_that.content,_that.size,_that.reason);case _:
+return $default(_that.text,_that.content,_that.size,_that.media,_that.reason);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -1026,10 +1028,10 @@ return $default(_that.text,_that.content,_that.size,_that.reason);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool text,  String content,  int size,  String? reason)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool text,  String content,  int size,  String? media,  String? reason)?  $default,) {final _that = this;
 switch (_that) {
 case _FilePreview() when $default != null:
-return $default(_that.text,_that.content,_that.size,_that.reason);case _:
+return $default(_that.text,_that.content,_that.size,_that.media,_that.reason);case _:
   return null;
 
 }
@@ -1041,12 +1043,14 @@ return $default(_that.text,_that.content,_that.size,_that.reason);case _:
 @JsonSerializable()
 
 class _FilePreview implements FilePreview {
-  const _FilePreview({this.text = false, this.content = '', this.size = 0, this.reason});
+  const _FilePreview({this.text = false, this.content = '', this.size = 0, this.media, this.reason});
   factory _FilePreview.fromJson(Map<String, dynamic> json) => _$FilePreviewFromJson(json);
 
 @override@JsonKey() final  bool text;
 @override@JsonKey() final  String content;
 @override@JsonKey() final  int size;
+/// `image` or `video` when the file can be displayed directly.
+@override final  String? media;
 @override final  String? reason;
 
 /// Create a copy of FilePreview
@@ -1062,16 +1066,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _FilePreview&&(identical(other.text, text) || other.text == text)&&(identical(other.content, content) || other.content == content)&&(identical(other.size, size) || other.size == size)&&(identical(other.reason, reason) || other.reason == reason));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _FilePreview&&(identical(other.text, text) || other.text == text)&&(identical(other.content, content) || other.content == content)&&(identical(other.size, size) || other.size == size)&&(identical(other.media, media) || other.media == media)&&(identical(other.reason, reason) || other.reason == reason));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,text,content,size,reason);
+int get hashCode => Object.hash(runtimeType,text,content,size,media,reason);
 
 @override
 String toString() {
-  return 'FilePreview(text: $text, content: $content, size: $size, reason: $reason)';
+  return 'FilePreview(text: $text, content: $content, size: $size, media: $media, reason: $reason)';
 }
 
 
@@ -1082,7 +1086,7 @@ abstract mixin class _$FilePreviewCopyWith<$Res> implements $FilePreviewCopyWith
   factory _$FilePreviewCopyWith(_FilePreview value, $Res Function(_FilePreview) _then) = __$FilePreviewCopyWithImpl;
 @override @useResult
 $Res call({
- bool text, String content, int size, String? reason
+ bool text, String content, int size, String? media, String? reason
 });
 
 
@@ -1099,12 +1103,13 @@ class __$FilePreviewCopyWithImpl<$Res>
 
 /// Create a copy of FilePreview
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? text = null,Object? content = null,Object? size = null,Object? reason = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? text = null,Object? content = null,Object? size = null,Object? media = freezed,Object? reason = freezed,}) {
   return _then(_FilePreview(
 text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
 as bool,content: null == content ? _self.content : content // ignore: cast_nullable_to_non_nullable
 as String,size: null == size ? _self.size : size // ignore: cast_nullable_to_non_nullable
-as int,reason: freezed == reason ? _self.reason : reason // ignore: cast_nullable_to_non_nullable
+as int,media: freezed == media ? _self.media : media // ignore: cast_nullable_to_non_nullable
+as String?,reason: freezed == reason ? _self.reason : reason // ignore: cast_nullable_to_non_nullable
 as String?,
   ));
 }

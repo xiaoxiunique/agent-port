@@ -58,14 +58,18 @@ abstract class FileListing with _$FileListing {
 
 /// Result of `GET /api/files/read`.
 ///
-/// `text` false means the file isn't previewable inline — either binary or
-/// past the host's size cap — and should be downloaded instead.
+/// Three outcomes: `text` true carries the content inline; `media` set to
+/// `image` or `video` means render it from the download URL instead (which
+/// serves the right content type); neither means download-only.
 @freezed
 abstract class FilePreview with _$FilePreview {
   const factory FilePreview({
     @Default(false) bool text,
     @Default('') String content,
     @Default(0) int size,
+
+    /// `image` or `video` when the file can be displayed directly.
+    String? media,
     String? reason,
   }) = _FilePreview;
 
