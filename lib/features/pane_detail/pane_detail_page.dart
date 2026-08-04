@@ -10,6 +10,7 @@ import '../../services/api_provider.dart';
 import '../../services/demo_data.dart';
 import '../../services/pane_log_service.dart';
 import '../../services/snapshot_service.dart';
+import '../files/file_browser_page.dart';
 import 'input_bar.dart';
 import 'pane_settings_page.dart';
 import 'terminal_pane_view.dart';
@@ -48,6 +49,19 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
       appBar: AppBar(
         title: Text(title, overflow: TextOverflow.ellipsis),
         actions: [
+          if (foundPane != null && foundPane.path.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.folder_outlined),
+              tooltip: '项目文件',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => FileBrowserPage(
+                    path: foundPane.path,
+                    title: foundPane.projectName,
+                  ),
+                ),
+              ),
+            ),
           if (foundPane != null)
             IconButton(
               icon: const Icon(Icons.notifications_none),

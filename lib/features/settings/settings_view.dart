@@ -65,6 +65,16 @@ class SettingsView extends ConsumerWidget {
           ]),
           const SettingsSectionHeader('监控'),
           SettingsGrouped(children: [
+            // The 电脑 tab was removed from the shell; this keeps the screen
+            // reachable, since it owns the screenshot and running-apps controls.
+            SettingsRow(
+              icon: Icons.computer_outlined,
+              tint: const Color(0xFF34C759),
+              label: '电脑控制',
+              value: '截图 / 应用',
+              onTap: () => _push(context, const DevicesPage()),
+            ),
+            const SettingsRowDivider(),
             SettingsRow(
               icon: Icons.timer_outlined,
               tint: const Color(0xFFFF9500),

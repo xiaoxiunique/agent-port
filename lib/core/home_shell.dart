@@ -3,17 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:native_glass_navbar/native_glass_navbar.dart';
 
 import '../features/cron/cron_page.dart';
-import '../features/files/file_roots_page.dart';
 import '../features/monitor/monitor_page.dart';
 import '../features/settings/settings_view.dart';
 import '../services/api_provider.dart';
 
-/// Root tab shell: 首页 / 电脑 / 文件 / 定时 / 设置.
+/// Root tab shell: 首页 / 定时 / 设置.
 ///
 /// The 定时 tab only appears when the host reports CronBox installed
 /// (`GET /api/capabilities`), so the app never offers a screen that would just
 /// fail. Capabilities load asynchronously; until they arrive the tab is
 /// absent, which is the same as the host not having it.
+///
+/// File browsing deliberately has no tab: it's scoped to a project, so the
+/// entry point is the folder button on that project's detail screen.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
@@ -34,15 +36,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
     final pages = <Widget>[
       const MonitorPage(),
-      const DevicesPage(),
-      const FileRootsPage(),
       if (hasCron) const CronPage(),
       const SettingsView(),
     ];
     final glassTabs = <NativeGlassNavBarItem>[
       const NativeGlassNavBarItem(label: '首页', symbol: 'square.grid.2x2'),
-      const NativeGlassNavBarItem(label: '电脑', symbol: 'laptopcomputer'),
-      const NativeGlassNavBarItem(label: '文件', symbol: 'folder'),
       if (hasCron) const NativeGlassNavBarItem(label: '定时', symbol: 'clock'),
       const NativeGlassNavBarItem(label: '设置', symbol: 'gearshape'),
     ];
@@ -51,16 +49,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         icon: Icon(Icons.dashboard_outlined),
         selectedIcon: Icon(Icons.dashboard),
         label: '首页',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.computer_outlined),
-        selectedIcon: Icon(Icons.computer),
-        label: '电脑',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.folder_outlined),
-        selectedIcon: Icon(Icons.folder),
-        label: '文件',
       ),
       if (hasCron)
         const NavigationDestination(
