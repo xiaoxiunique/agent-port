@@ -14,6 +14,7 @@ import '../models/notify_config.dart';
 import '../models/pending.dart';
 import '../models/project_history.dart';
 import '../models/running_app.dart';
+import '../models/sessions.dart';
 import '../models/snapshot.dart';
 import '../models/token_usage.dart';
 import '../models/usb_device.dart';
@@ -234,6 +235,37 @@ class AgentMonitorApi {
       queryParameters: {'path': path},
     );
     return FilePreview.fromJson(r.data!);
+  }
+
+  /// `GET /api/sessions` — past Claude/Codex conversations for a project.
+  Future<List<AgentSessions>> projectSessions(String path, {int? limit}) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      '/api/sessions',
+      queryParameters: {'path': path, 'limit': ?limit},
+    );
+    return SessionsResponse.fromJson(r.data!).agents;
+  }
+
+  /// `POST /api/sessions/resume` — reopen a past conversation in its own
+  /// session. Returns the multiplexer session name it now runs in.
+  Future<String> resumeSession({
+    required String path,
+    required String agent,
+    required String sessionId,
+    required String suffix,
+  }) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/api/sessions/resume',
+      data: ResumeSessionRequest(
+        path: path,
+        agent: agent,
+        sessionId: sessionId,
+        suffix: suffix,
+      ).toJson(),
+    );
+    final res = ResumeSessionResponse.fromJson(r.data!);
+    if (!res.ok) throw Exception(res.error ?? '恢复会话失败');
+    return res.session ?? '';
   }
 
   /// Absolute URL for downloading a file, with the auth token appended when
