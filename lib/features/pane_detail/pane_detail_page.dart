@@ -46,6 +46,16 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
         : (pane != null ? pane.projectName : widget.paneId);
     final foundPane = pane;
 
+    // In dark mode the whole page adopts the terminal's colors, so the log
+    // view, the terminal and the input bar read as one surface rather than a
+    // black rectangle inside a grey shell. Light mode is left alone — the
+    // palette is a dark one and has no light counterpart.
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final page = _buildPage(context, foundPane, title);
+    return dark ? Theme(data: AgentPortTheme.terminal, child: page) : page;
+  }
+
+  Widget _buildPage(BuildContext context, Pane? foundPane, String title) {
     return Scaffold(
       appBar: AppBar(
         title: Text(title, overflow: TextOverflow.ellipsis),
@@ -88,9 +98,8 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
             ),
         ],
       ),
-      // The xterm terminal stays dark regardless of system theme (matches the
-      // native detail sheet); the log view and the surrounding shell follow
-      // the system light/dark setting.
+      // The xterm terminal is always dark; in light mode it stays a dark
+      // rectangle, in dark mode the rest of the page now matches it.
       body: foundPane == null
           ? const Center(child: Text('pane 不在当前快照'))
           : Column(
@@ -98,7 +107,7 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
                 Expanded(
                   child: _mode == RuntimeMode.terminal
                       ? Theme(
-                          data: AgentPortTheme.dark,
+                          data: AgentPortTheme.terminal,
                           child: TerminalPaneView(
                             api: ref.read(apiProvider),
                             paneId: widget.paneId,

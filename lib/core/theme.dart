@@ -80,34 +80,89 @@ class AgentPortTheme {
       ? Colors.black.withValues(alpha: 0.0)
       : Colors.black.withValues(alpha: 0.05);
 
-  /// Terminal palette — always dark, regardless of system theme
-  /// (TerminalPaneView.swift:66-69).
-  static const terminalBackground = Color(0xFF050605);
-  static const terminalForeground = Color(0xFFDBE6D1);
-  static const terminalCursor = Color(0xFF9DE07B);
+  /// Terminal palette — always dark, regardless of system theme.
+  ///
+  /// Mirrors the user's Ghostty setup: the "Matrix" theme with `foreground`
+  /// overridden to #00ff41. Matrix's own foreground (#426644) is dim enough to
+  /// read as disabled text, so it serves as the secondary tone here instead.
+  static const terminalBackground = Color(0xFF0F191C);
+  static const terminalForeground = Color(0xFF00FF41);
+  static const terminalCursor = Color(0xFF00FF41);
 
-  /// xterm theme matching the native SwiftTerm colors.
+  /// Muted green for metadata and hints. Matrix's own foreground (#426644) is
+  /// what Ghostty would use, but at 2.7:1 on this background it fails WCAG AA
+  /// for body text — unreadable on a phone. Palette entry 15 is the next green
+  /// up and clears AA at 4.7:1.
+  static const terminalDim = Color(0xFF678C61);
+
+  /// One step up from the background, for cards and bars on a terminal-themed
+  /// page. Taken from Matrix's selection background.
+  static const terminalSurface = Color(0xFF18282E);
+
+  /// Dark theme for the pane detail page, so the log view, terminal and input
+  /// bar share the terminal's colors instead of the app's neutral grey.
+  static ThemeData get terminal => _buildTerminal();
+
+  static ThemeData _buildTerminal() {
+    final base = _build(Brightness.dark);
+    final scheme = base.colorScheme.copyWith(
+      primary: terminalForeground,
+      onPrimary: terminalBackground,
+      surface: terminalSurface,
+      onSurface: terminalForeground,
+      surfaceContainerHighest: terminalSurface,
+      // Secondary text (status reasons, hints) — anything reading a "muted"
+      // role lands on the dim green rather than Material's default grey.
+      onSurfaceVariant: terminalDim,
+      outline: terminalDim,
+      outlineVariant: terminalDim.withValues(alpha: 0.4),
+      secondary: terminalDim,
+      onSecondary: terminalBackground,
+    );
+    return base.copyWith(
+      colorScheme: scheme,
+      scaffoldBackgroundColor: terminalBackground,
+      canvasColor: terminalBackground,
+      dividerColor: terminalDim.withValues(alpha: 0.35),
+      hintColor: terminalDim,
+      appBarTheme: base.appBarTheme.copyWith(
+        backgroundColor: terminalBackground,
+        foregroundColor: terminalForeground,
+      ),
+      // The log view renders plain Text with no explicit color, so the body
+      // styles are what actually tint it.
+      textTheme: base.textTheme.apply(
+        bodyColor: terminalForeground,
+        displayColor: terminalForeground,
+      ),
+      iconTheme: const IconThemeData(color: terminalForeground),
+    );
+  }
+
+  /// xterm theme — the Ghostty "Matrix" palette.
   static const terminalTheme = TerminalTheme(
     cursor: terminalCursor,
-    selection: Color(0x559DE07B),
+    selection: Color(0x5500FF87),
     foreground: terminalForeground,
     background: terminalBackground,
-    black: Color(0xFF000000),
-    red: Color(0xFFCD3131),
-    green: Color(0xFF0DBC79),
-    yellow: Color(0xFFE5E510),
-    blue: Color(0xFF2472C8),
-    magenta: Color(0xFFBC3FBC),
-    cyan: Color(0xFF11A8CD),
-    white: Color(0xFFE5E5E5),
-    brightBlack: Color(0xFF666666),
-    brightRed: Color(0xFFF14C4C),
-    brightGreen: Color(0xFF23D18B),
-    brightYellow: Color(0xFFF5F543),
-    brightBlue: Color(0xFF3B8EEA),
-    brightMagenta: Color(0xFFD670D6),
-    brightCyan: Color(0xFF29B8DB),
-    brightWhite: Color(0xFFFFFFFF),
+    black: Color(0xFF0F191C),
+    red: Color(0xFF23755A),
+    green: Color(0xFF82D967),
+    yellow: Color(0xFFFFD700),
+    blue: Color(0xFF3F5242),
+    magenta: Color(0xFF409931),
+    cyan: Color(0xFF50B45A),
+    white: Color(0xFF507350),
+    brightBlack: Color(0xFF688060),
+    brightRed: Color(0xFF2FC079),
+    brightGreen: Color(0xFF90D762),
+    brightYellow: Color(0xFFFAFF00),
+    brightBlue: Color(0xFF4F7E7E),
+    brightMagenta: Color(0xFF11FF25),
+    brightCyan: Color(0xFFC1FF8A),
+    brightWhite: Color(0xFF678C61),
+    // Search hits keep high-contrast colors — the Matrix greens are too close
+    // to each other to mark a hit legibly.
     searchHitBackground: Color(0xFFFFFF2B),
     searchHitBackgroundCurrent: Color(0xFF31FF26),
     searchHitForeground: Color(0xFF000000),
