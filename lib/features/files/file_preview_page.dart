@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 
 import '../../core/theme.dart';
 import '../../data/models/files.dart';
@@ -157,16 +158,60 @@ class _VideoBody extends ConsumerWidget {
   }
 }
 
-/// Audio hands off to the system player too — same reasoning as video: no
-/// in-app player dependency, iOS/Android just opens the downloaded file.
-class _AudioBody extends ConsumerWidget {
+/// In-app audio player. Streams from the host via the download endpoint and
+/// offers play/pause, seek and a time readout — no handoff to the system
+/// player. A single instance is created per preview, so leaving the page
+/// stops playback.
+class _AudioBody extends ConsumerStatefulWidget {
   const _AudioBody({required this.entry, required this.size});
   final FileEntry entry;
   final int size;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AudioBody> createState() => _AudioBodyState();
+}
+
+class _AudioBodyState extends ConsumerState<_AudioBody> {
+  AudioPlayer? _player;
+  bool _ready = false;
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final url = ref.read(apiProvider).fileDownloadUrl(widget.entry.path);
+    final player = AudioPlayer();
+    _player = player;
+    try {
+      await player.setUrl(url);
+      if (mounted) setState(() => _ready = true);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _player?.dispose();
+    super.dispose();
+  }
+
+  String _fmt(Duration? d) {
+    if (d == null) return '--:--';
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final player = _player;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -184,25 +229,135 @@ class _AudioBody extends ConsumerWidget {
                   size: 32, color: theme.colorScheme.primary),
             ),
             const SizedBox(height: 16),
-            Text(entry.name,
+            Text(widget.entry.name,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
-              humanSize(size),
+              humanSize(widget.size),
               style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
             ),
             const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: () => downloadEntry(context, ref, entry),
-              icon: const Icon(Icons.play_arrow, size: 18),
-              label: const Text('播放'),
+
+            if (_error.isNotEmpty)
+              Text(_error,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: theme.colorScheme.error, fontSize: 13))
+            else if (!_ready)
+              const SizedBox(
+                  width: 28, height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2.5))
+            else
+              _PlayerControls(player: player!, fmt: _fmt),
+
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => downloadEntry(context, ref, widget.entry),
+              child: const Text('下载到手机'),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Play/pause, seek bar and time readout, fed by just_audio streams.
+class _PlayerControls extends StatefulWidget {
+  const _PlayerControls({required this.player, required this.fmt});
+  final AudioPlayer player;
+  final String Function(Duration?) fmt;
+
+  @override
+  State<_PlayerControls> createState() => _PlayerControlsState();
+}
+
+class _PlayerControlsState extends State<_PlayerControls> {
+  double _dragValue = -1; // -1 = follow playback, else a mid-drag position
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final player = widget.player;
+
+    return StreamBuilder<Duration?>(
+      stream: player.durationStream,
+      builder: (context, durSnap) {
+        final total = durSnap.data ?? Duration.zero;
+
+        return StreamBuilder<PlayerState>(
+          stream: player.playerStateStream,
+          builder: (context, stateSnap) {
+            final playing = stateSnap.data?.playing ?? false;
+            final loading = stateSnap.data?.processingState ==
+                ProcessingState.loading;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                StreamBuilder<Duration?>(
+                  stream: player.positionStream,
+                  builder: (context, posSnap) {
+                    final pos = posSnap.data ?? Duration.zero;
+                    final shown = _dragValue >= 0
+                        ? Duration(seconds: _dragValue.round())
+                        : pos;
+                    final frac = total.inMilliseconds == 0
+                        ? 0.0
+                        : (shown.inMilliseconds / total.inMilliseconds)
+                            .clamp(0.0, 1.0);
+                    return Row(
+                      children: [
+                        Text(widget.fmt(shown),
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: theme.hintColor)),
+                        Expanded(
+                          child: Slider(
+                            value: frac.toDouble(),
+                            onChanged: loading
+                                ? null
+                                : (v) => setState(() => _dragValue =
+                                    v * total.inMilliseconds),
+                            onChangeEnd: (v) async {
+                              final t = v * total.inMilliseconds;
+                              await player.seek(Duration(milliseconds: t.round()));
+                              setState(() => _dragValue = -1);
+                            },
+                          ),
+                        ),
+                        Text(widget.fmt(total),
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: theme.hintColor)),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 4),
+                IconButton(
+                  iconSize: 48,
+                  icon: Icon(
+                    loading
+                        ? Icons.hourglass_top
+                        : playing
+                            ? Icons.pause_circle_filled
+                            : Icons.play_circle_filled,
+                    color: theme.colorScheme.primary,
+                  ),
+                  onPressed: () async {
+                    if (playing) {
+                      await player.pause();
+                    } else {
+                      await player.play();
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
