@@ -62,6 +62,7 @@ class FilePreviewPage extends ConsumerWidget {
         data: (p) => switch (p.media) {
           'image' => _ImageBody(entry: entry),
           'video' => _VideoBody(entry: entry, size: p.size),
+          'audio' => _AudioBody(entry: entry, size: p.size),
           _ => p.text
               ? _TextBody(content: p.content)
               : _NotPreviewable(preview: p, entry: entry, theme: theme),
@@ -156,9 +157,58 @@ class _VideoBody extends ConsumerWidget {
   }
 }
 
+/// Audio hands off to the system player too — same reasoning as video: no
+/// in-app player dependency, iOS/Android just opens the downloaded file.
+class _AudioBody extends ConsumerWidget {
+  const _AudioBody({required this.entry, required this.size});
+  final FileEntry entry;
+  final int size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                color: AgentPortTheme.elevatedSurface(theme.brightness),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(Icons.music_note,
+                  size: 32, color: theme.colorScheme.primary),
+            ),
+            const SizedBox(height: 16),
+            Text(entry.name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Text(
+              humanSize(size),
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: () => downloadEntry(context, ref, entry),
+              icon: const Icon(Icons.play_arrow, size: 18),
+              label: const Text('播放'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TextBody extends StatelessWidget {
-  const _TextBody({required this.content});
-  final String content;
+  const _TextBody({required this.content});  final String content;
 
   @override
   Widget build(BuildContext context) {
