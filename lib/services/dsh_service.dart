@@ -47,10 +47,14 @@ final dshEndpointProvider = FutureProvider<DshEndpoint>((ref) async {
     final port = (dsh['relayPort'] as num?)?.toInt();
     if (!available || port == null) return DshEndpoint(available: available);
 
-    // Same host, different port: the relay listens wherever amux serve does.
+    // Same host, different port. The scheme comes from the host: browsers
+    // only allow a WebSocket from a plain-HTTP page on loopback, so off this
+    // machine the relay has to be HTTPS and dsh's UI would otherwise load
+    // but never populate.
     final base = Uri.parse(profile.url);
-    final url = Uri(scheme: base.scheme.isEmpty ? 'http' : base.scheme,
-        host: base.host, port: port).toString();
+    final tls = dsh['relayTls'] == true;
+    final url = Uri(scheme: tls ? 'https' : 'http', host: base.host, port: port)
+        .toString();
     return DshEndpoint(available: true, url: url);
   } on DioException {
     return const DshEndpoint();
