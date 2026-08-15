@@ -44,27 +44,22 @@ class _DshPageState extends ConsumerState<DshPage> {
   Widget build(BuildContext context) {
     final async = ref.watch(dshEndpointProvider);
 
+    // No app bar: dsh's own UI has a header, and a second one just eats
+    // vertical space on a phone. SafeArea keeps it clear of the notch, and
+    // the bottom is left to the tab bar.
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('DeepSeek'),
-        actions: [
-          IconButton(
-            tooltip: '刷新',
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: () {
-              _controller?.reload();
-              ref.invalidate(dshEndpointProvider);
-            },
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: async.when(
+      body: SafeArea(
+        bottom: false,
+        child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _Unavailable(message: '无法连接:$e'),
+        error: (e, _) => _Unavailable(
+          message: '无法连接:$e',
+          onRetry: () => ref.invalidate(dshEndpointProvider),
+        ),
         data: (endpoint) {
           if (!endpoint.usable) {
             return _Unavailable(
+              onRetry: () => ref.invalidate(dshEndpointProvider),
               message: endpoint.available
                   // dsh answered the host's probe but the relay isn't up:
                   // the daemon was already running when dsh started.
@@ -83,15 +78,17 @@ class _DshPageState extends ConsumerState<DshPage> {
                 const Center(child: CircularProgressIndicator()),
             ],
           );
-        },
+          },
+        ),
       ),
     );
   }
 }
 
 class _Unavailable extends StatelessWidget {
-  const _Unavailable({required this.message});
+  const _Unavailable({required this.message, this.onRetry});
   final String message;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +106,10 @@ class _Unavailable extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(color: theme.hintColor, height: 1.5),
             ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 18),
+              FilledButton.tonal(onPressed: onRetry, child: const Text('重试')),
+            ],
           ],
         ),
       ),
