@@ -53,7 +53,14 @@ final dshEndpointProvider = FutureProvider<DshEndpoint>((ref) async {
     // but never populate.
     final base = Uri.parse(profile.url);
     final tls = dsh['relayTls'] == true;
-    final url = Uri(scheme: tls ? 'https' : 'http', host: base.host, port: port)
+    // Over TLS the certificate is issued for a name, so the host reports which
+    // one; using the address the API happens to live at would fail the
+    // handshake. Falls back to that address when there is no certificate.
+    final certHost = (dsh['relayHost'] as String?)?.trim();
+    final host = (tls && certHost != null && certHost.isNotEmpty)
+        ? certHost
+        : base.host;
+    final url = Uri(scheme: tls ? 'https' : 'http', host: host, port: port)
         .toString();
     return DshEndpoint(available: true, url: url);
   } on DioException {
