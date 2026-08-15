@@ -21,6 +21,7 @@ class _DshPageState extends ConsumerState<DshPage> {
   WebViewController? _controller;
   String? _loadedUrl;
   bool _loading = true;
+  String _error = '';
 
   void _ensureController(String url) {
     // Rebuilt only when the endpoint itself changes (host switch, relay
@@ -28,12 +29,25 @@ class _DshPageState extends ConsumerState<DshPage> {
     if (_loadedUrl == url && _controller != null) return;
     _loadedUrl = url;
     _loading = true;
+    _error = '';
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) {
             if (mounted) setState(() => _loading = false);
+          },
+          // Without this a failure looks identical to a slow load: the
+          // spinner just never goes away and says nothing about why.
+          onWebResourceError: (e) {
+            // A sub-resource failing is not worth replacing the page over.
+            if (e.isForMainFrame == false) return;
+            if (mounted) {
+              setState(() {
+                _loading = false;
+                _error = '${e.description} (${e.errorCode})';
+              });
+            }
           },
         ),
       )
@@ -71,6 +85,19 @@ class _DshPageState extends ConsumerState<DshPage> {
             );
           }
           _ensureController(endpoint.url!);
+          if (_error.isNotEmpty) {
+            return _Unavailable(
+              message: '打不开 ${endpoint.url}\n\n$_error',
+              onRetry: () {
+                setState(() {
+                  _error = '';
+                  _loading = true;
+                  _loadedUrl = null;
+                });
+                ref.invalidate(dshEndpointProvider);
+              },
+            );
+          }
           return Stack(
             children: [
               WebViewWidget(controller: _controller!),

@@ -10,6 +10,7 @@ import '../../data/models/pane_ext.dart';
 import '../../data/models/server_profile.dart';
 import '../../data/models/snapshot.dart';
 import '../../services/demo_data.dart';
+import '../../services/dsh_service.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
 import '../onboarding/onboarding_view.dart';
@@ -58,7 +59,7 @@ class MonitorPage extends ConsumerWidget {
             MaterialPageRoute(builder: (_) => const ServerEditPage()),
           ),
         ),
-        actions: const [_UuButton(), SizedBox(width: 6)],
+        actions: const [_DshButton(), _UuButton(), SizedBox(width: 6)],
       ),
       body: snapAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -571,6 +572,38 @@ String _timeOfDay(String iso) {
 
 /// Compact top-right token-usage readout: Claude + Codex all-time totals.
 /// Tap for a per-agent breakdown.
+/// Opens the DeepSeek Harness UI in Safari.
+///
+/// The embedded WebView on the DeepSeek tab does not load it from another
+/// device, so this hands the same URL to a browser that does. Only shown when
+/// the host is relaying dsh at all.
+class _DshButton extends ConsumerWidget {
+  const _DshButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final endpoint = ref.watch(dshEndpointProvider).valueOrNull;
+    if (endpoint == null || !endpoint.usable) return const SizedBox.shrink();
+
+    return IconButton(
+      tooltip: '在浏览器中打开 DeepSeek',
+      icon: const Icon(Icons.auto_awesome_outlined, size: 21),
+      onPressed: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        final ok = await launchUrl(
+          Uri.parse(endpoint.url!),
+          mode: LaunchMode.externalApplication,
+        );
+        if (!ok) {
+          messenger.showSnackBar(
+            SnackBar(content: Text('无法打开 ${endpoint.url}')),
+          );
+        }
+      },
+    );
+  }
+}
+
 /// Opens the UU app via its `uuremote://` scheme.
 ///
 /// Replaces the Claude/Codex token readout that used to sit here: the numbers
