@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:native_glass_navbar/native_glass_navbar.dart';
 
 import '../features/cron/cron_page.dart';
+import '../features/dsh/dsh_page.dart';
 import '../features/monitor/monitor_page.dart';
 import '../features/settings/settings_view.dart';
 import '../services/api_provider.dart';
+import '../services/dsh_service.dart';
 
-/// Root tab shell: 首页 / 定时 / 设置.
+/// Root tab shell: 首页 / 定时 / DeepSeek / 设置.
 ///
 /// The 定时 tab only appears when the host reports CronBox installed
 /// (`GET /api/capabilities`), so the app never offers a screen that would just
@@ -33,15 +35,20 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final theme = Theme.of(context);
     final hasCron =
         ref.watch(capabilitiesProvider).valueOrNull?.cronbox ?? false;
+    // Only worth a tab when the host actually relays dsh's UI.
+    final hasDsh = ref.watch(dshEndpointProvider).valueOrNull?.usable ?? false;
 
     final pages = <Widget>[
       const MonitorPage(),
       if (hasCron) const CronPage(),
+      if (hasDsh) const DshPage(),
       const SettingsView(),
     ];
     final glassTabs = <NativeGlassNavBarItem>[
       const NativeGlassNavBarItem(label: '首页', symbol: 'square.grid.2x2'),
       if (hasCron) const NativeGlassNavBarItem(label: '定时', symbol: 'clock'),
+      if (hasDsh)
+        const NativeGlassNavBarItem(label: 'DeepSeek', symbol: 'sparkles'),
       const NativeGlassNavBarItem(label: '设置', symbol: 'gearshape'),
     ];
     final destinations = <NavigationDestination>[
@@ -55,6 +62,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           icon: Icon(Icons.schedule_outlined),
           selectedIcon: Icon(Icons.schedule),
           label: '定时',
+        ),
+      if (hasDsh)
+        const NavigationDestination(
+          icon: Icon(Icons.auto_awesome_outlined),
+          selectedIcon: Icon(Icons.auto_awesome),
+          label: 'DeepSeek',
         ),
       const NavigationDestination(
         icon: Icon(Icons.settings_outlined),

@@ -284,6 +284,16 @@ class AgentMonitorApi {
 
   // --- Capabilities ---
 
+  /// The same payload, unparsed.
+  ///
+  /// For fields the `Capabilities` model doesn't carry yet — adding one there
+  /// requires a codegen run, and the toolchain currently can't do one.
+  Future<Map<String, dynamic>> rawCapabilities() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/capabilities');
+    final caps = r.data?['capabilities'];
+    return caps is Map<String, dynamic> ? caps : <String, dynamic>{};
+  }
+
   /// `GET /api/capabilities` — which optional tools the host has.
   ///
   /// Returns all-false when the service predates this endpoint, so an older
