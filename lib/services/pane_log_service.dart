@@ -208,6 +208,21 @@ String? _normalizeLine(String line) {
   final trimmed = v.trim();
   if (trimmed.isNotEmpty && _isSeparatorOnly(trimmed)) return null;
 
+  // opencode chrome. Its mini interface redraws a block-art banner on every
+  // launch, a status footer that reprints as the elapsed time ticks, and a
+  // progress bar — none of it is output, and all of it churns, so it both
+  // fills the log and defeats the consecutive-line dedupe above.
+  //
+  // Deliberately narrow: opencode also draws a `┃` gutter down the left of
+  // tool results, and those lines carry real content (file excerpts, search
+  // hits). Dropping the gutter would drop the output with it.
+  if (trimmed.isNotEmpty && _isBlockArtOnly(trimmed)) return null;
+  if (trimmed.startsWith('▣ ') || trimmed.startsWith('▣  ')) return null;
+  if (trimmed.contains('esc interrupt') &&
+      trimmed.runes.any((c) => c == 0x25A0 || c == 0x2B1D)) {
+    return null;
+  }
+
   return v.replaceFirst(RegExp(r'\s+$'), '');
 }
 
@@ -226,6 +241,24 @@ const _separatorChars = {
 bool _isSeparatorOnly(String s) {
   for (final c in s.runes) {
     if (!_separatorChars.contains(c)) return false;
+  }
+  return true;
+}
+
+/// Half/full block glyphs, which opencode uses for its launch banner and for
+/// the rule above the composer. Nothing it prints as actual output is drawn
+/// only from these.
+const _blockArtChars = {
+  0x2588, // █
+  0x2580, // ▀
+  0x2584, // ▄
+  0x2579, // ╹
+  0x20, // space
+};
+
+bool _isBlockArtOnly(String s) {
+  for (final c in s.runes) {
+    if (!_blockArtChars.contains(c)) return false;
   }
   return true;
 }
