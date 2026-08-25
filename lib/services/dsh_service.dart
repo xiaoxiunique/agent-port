@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_provider.dart';
 import 'demo_data.dart';
@@ -36,8 +37,53 @@ class DshEndpoint {
   bool get usable => available && url != null;
 }
 
+/// A URL typed in by hand, overriding whatever the host advertises.
+///
+/// The host can only report where *it* put the relay; whether this device can
+/// reach that address is a different question, and one the host cannot answer.
+/// A tailnet name that resolves on the Mac may be hijacked on the phone's
+/// network, and a tunnel URL is not something the host knows about at all.
+/// So the override is stored per device, not per server.
+///
+/// Kept out of `AppSettings` because that model is generated and a codegen run
+/// currently fails on this toolchain.
+class DshOverrideUrl extends AsyncNotifier<String> {
+  static const _key = 'dsh_override_url';
+
+  @override
+  Future<String> build() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_key) ?? '';
+  }
+
+  /// Save a URL, or clear the override with a blank one.
+  Future<void> set(String url) async {
+    final trimmed = url.trim();
+    final prefs = await SharedPreferences.getInstance();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_key);
+    } else {
+      await prefs.setString(_key, trimmed);
+    }
+    state = AsyncData(trimmed);
+    // The endpoint is derived from this, so it has to be recomputed.
+    ref.invalidate(dshEndpointProvider);
+  }
+}
+
+final dshOverrideUrlProvider =
+    AsyncNotifierProvider<DshOverrideUrl, String>(DshOverrideUrl.new);
+
 final dshEndpointProvider = FutureProvider<DshEndpoint>((ref) async {
   if (ref.watch(demoModeProvider)) return const DshEndpoint();
+
+  // A hand-entered URL wins over discovery, and is trusted even when the host
+  // reports no dsh at all — the point of typing one is to reach something the
+  // host could not tell us about.
+  final override = ref.watch(dshOverrideUrlProvider).valueOrNull ?? '';
+  if (override.isNotEmpty) {
+    return DshEndpoint(available: true, url: override);
+  }
 
   final settings = ref.watch(settingsProvider).valueOrNull;
   if (settings == null) return const DshEndpoint();

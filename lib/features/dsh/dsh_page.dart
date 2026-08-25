@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../services/dsh_service.dart';
+import 'dsh_url_dialog.dart';
 
 /// DeepSeek Harness, shown as its own web UI rather than reimplemented.
 ///
@@ -22,6 +23,12 @@ class _DshPageState extends ConsumerState<DshPage> {
   String? _loadedUrl;
   bool _loading = true;
   String _error = '';
+
+  void _editUrl(WidgetRef ref) => promptDshUrl(
+        context,
+        ref,
+        ref.read(dshOverrideUrlProvider).valueOrNull ?? '',
+      );
 
   void _ensureController(String url, {bool viaNgrok = false}) {
     // Rebuilt only when the endpoint itself changes (host switch, relay
@@ -72,6 +79,7 @@ class _DshPageState extends ConsumerState<DshPage> {
         child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _Unavailable(
+          onEditUrl: () => _editUrl(ref),
           message: '无法连接:$e',
           onRetry: () => ref.invalidate(dshEndpointProvider),
         ),
@@ -92,7 +100,8 @@ class _DshPageState extends ConsumerState<DshPage> {
           _ensureController(endpoint.url!, viaNgrok: endpoint.viaNgrok);
           if (_error.isNotEmpty) {
             return _Unavailable(
-              message: '打不开 ${endpoint.url}\n\n$_error',
+              onEditUrl: () => _editUrl(ref),
+          message: '打不开 ${endpoint.url}\n\n$_error',
               onRetry: () {
                 setState(() {
                   _error = '';
@@ -118,9 +127,13 @@ class _DshPageState extends ConsumerState<DshPage> {
 }
 
 class _Unavailable extends StatelessWidget {
-  const _Unavailable({required this.message, this.onRetry});
+  const _Unavailable({required this.message, this.onRetry, this.onEditUrl});
   final String message;
   final VoidCallback? onRetry;
+
+  /// Set the address by hand. Offered here because a failure is exactly when
+  /// what the host advertised turns out to be unreachable from this device.
+  final VoidCallback? onEditUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -138,9 +151,24 @@ class _Unavailable extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(color: theme.hintColor, height: 1.5),
             ),
-            if (onRetry != null) ...[
+            if (onRetry != null || onEditUrl != null) ...[
               const SizedBox(height: 18),
-              FilledButton.tonal(onPressed: onRetry, child: const Text('重试')),
+              Wrap(
+                spacing: 10,
+                alignment: WrapAlignment.center,
+                children: [
+                  if (onRetry != null)
+                    FilledButton.tonal(
+                      onPressed: onRetry,
+                      child: const Text('重试'),
+                    ),
+                  if (onEditUrl != null)
+                    TextButton(
+                      onPressed: onEditUrl,
+                      child: const Text('手动设置地址'),
+                    ),
+                ],
+              ),
             ],
           ],
         ),

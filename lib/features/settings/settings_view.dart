@@ -12,6 +12,8 @@ import '../../data/models/running_app.dart';
 import '../../data/models/server_profile.dart';
 import '../../services/api_provider.dart';
 import '../../services/demo_data.dart';
+import '../../services/dsh_service.dart';
+import '../dsh/dsh_url_dialog.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
 import '../usb/usb_devices_page.dart';
@@ -64,6 +66,20 @@ class SettingsView extends ConsumerWidget {
               value: activeName,
               onTap: () => _push(context, const _ServersListPage()),
             ),
+          ]),
+          const SettingsSectionHeader('DeepSeek'),
+          SettingsGrouped(children: [
+            Consumer(builder: (context, ref, _) {
+              final custom =
+                  ref.watch(dshOverrideUrlProvider).valueOrNull ?? '';
+              return SettingsRow(
+                icon: Icons.link,
+                tint: const Color(0xFFAF52DE),
+                label: 'DeepSeek 地址',
+                value: custom.isEmpty ? '自动发现' : custom,
+                onTap: () => promptDshUrl(context, ref, custom),
+              );
+            }),
           ]),
           const SettingsSectionHeader('监控'),
           SettingsGrouped(children: [
