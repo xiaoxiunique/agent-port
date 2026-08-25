@@ -5,6 +5,7 @@ import '../../core/theme.dart';
 import '../../data/models/cron.dart';
 import '../../services/cron_service.dart';
 import 'cron_job_log_page.dart';
+import '../../core/widgets/content_pane.dart';
 
 /// CronBox scheduled jobs: what's scheduled, what ran, and what failed.
 ///
@@ -48,10 +49,10 @@ class _CronPageState extends ConsumerState<CronPage> {
           const SizedBox(width: 4),
         ],
       ),
-      body: RefreshIndicator(
+      body: ContentPane(child: RefreshIndicator(
         onRefresh: _refresh,
         child: _tab == 0 ? const _SchedulesList() : const _JobsList(),
-      ),
+      )),
     );
   }
 }
@@ -353,7 +354,7 @@ class _ScheduleHistoryPage extends ConsumerWidget {
     final async = ref.watch(cronJobsForScheduleProvider(schedule.id));
     return Scaffold(
       appBar: AppBar(title: Text(schedule.script.split('/').last)),
-      body: async.when(
+      body: ContentPane(child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _ErrorView(
           error: e,
@@ -368,7 +369,7 @@ class _ScheduleHistoryPage extends ConsumerWidget {
                 separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (_, i) => _JobCard(job: jobs[i]),
               ),
-      ),
+      )),
     );
   }
 }

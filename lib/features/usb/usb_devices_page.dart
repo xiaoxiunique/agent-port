@@ -6,6 +6,7 @@ import '../../core/theme.dart';
 import '../../data/models/usb_device.dart';
 import '../../services/api_provider.dart';
 import '../../services/usb_service.dart';
+import '../../core/widgets/content_pane.dart';
 
 /// USB devices physically connected to the host.
 ///
@@ -30,7 +31,7 @@ class UsbDevicesPage extends ConsumerWidget {
           const SizedBox(width: 4),
         ],
       ),
-      body: async.when(
+      body: ContentPane(child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _Error(
           error: e,
@@ -54,7 +55,7 @@ class UsbDevicesPage extends ConsumerWidget {
             ),
           );
         },
-      ),
+      )),
     );
   }
 }

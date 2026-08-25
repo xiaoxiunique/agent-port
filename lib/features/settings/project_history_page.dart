@@ -5,6 +5,7 @@ import '../../data/models/project_history.dart';
 import '../../services/api_provider.dart';
 import '../../services/demo_data.dart';
 import 'widgets/settings_rows.dart';
+import '../../core/widgets/content_pane.dart';
 
 /// Recently launched projects, with a shortcut to relaunch one.
 ///
@@ -67,7 +68,7 @@ class _ProjectHistoryPageState extends ConsumerState<ProjectHistoryPage> {
           IconButton(icon: const Icon(Icons.refresh), onPressed: _reload),
         ],
       ),
-      body: FutureBuilder<ProjectHistoryResponse>(
+      body: ContentPane(child: FutureBuilder<ProjectHistoryResponse>(
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
@@ -115,7 +116,7 @@ class _ProjectHistoryPageState extends ConsumerState<ProjectHistoryPage> {
             ],
           );
         },
-      ),
+      )),
     );
   }
 }

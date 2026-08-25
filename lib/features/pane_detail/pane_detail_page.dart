@@ -19,9 +19,24 @@ import 'terminal_pane_view.dart';
 /// Single-page pane detail with a Logs/Terminal mode toggle and a unified
 /// bottom InputBar. Mirrors the native PaneDetailSheet structure (not a tab bar).
 class PaneDetailPage extends ConsumerStatefulWidget {
-  const PaneDetailPage({super.key, required this.paneId});
+  const PaneDetailPage({
+    super.key,
+    required this.paneId,
+    this.embedded = false,
+    this.onClose,
+  });
 
   final String paneId;
+
+  /// Rendered beside a list rather than pushed over it (iPad split view).
+  ///
+  /// There is nothing to pop in that case, so the back button would be a dead
+  /// control, and killing the session has to clear the selection instead.
+  final bool embedded;
+
+  /// How to dismiss when embedded — clearing the host's selection. Ignored
+  /// when pushed, which pops instead.
+  final VoidCallback? onClose;
 
   @override
   ConsumerState<PaneDetailPage> createState() => _PaneDetailPageState();
@@ -55,9 +70,20 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
     return dark ? Theme(data: AgentPortTheme.terminal, child: page) : page;
   }
 
+  /// Leave this session: pop when pushed, clear the selection when embedded.
+  void _dismiss() {
+    if (widget.embedded) {
+      widget.onClose?.call();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
   Widget _buildPage(BuildContext context, Pane? foundPane, String title) {
     return Scaffold(
       appBar: AppBar(
+        // Embedded there is nothing behind this pane to go back to.
+        automaticallyImplyLeading: !widget.embedded,
         title: Text(title, overflow: TextOverflow.ellipsis),
         actions: [
           if (foundPane != null && foundPane.path.isNotEmpty) ...[
@@ -124,7 +150,7 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
                         ? RuntimeMode.terminal
                         : RuntimeMode.log;
                   }),
-                  onKilled: () => Navigator.of(context).maybePop(),
+                  onKilled: _dismiss,
                 ),
               ],
             ),

@@ -6,6 +6,7 @@ import '../../data/models/sessions.dart';
 import '../../services/api_provider.dart';
 import '../../services/demo_data.dart';
 import '../../services/session_service.dart';
+import '../../core/widgets/content_pane.dart';
 
 /// Past Claude Code and Codex conversations for one project.
 ///
@@ -121,7 +122,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
           const SizedBox(width: 4),
         ],
       ),
-      body: async.when(
+      body: ContentPane(child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _Error(
           error: e,
@@ -157,7 +158,7 @@ class _SessionListPageState extends ConsumerState<SessionListPage> {
             ),
           );
         },
-      ),
+      )),
     );
   }
 }

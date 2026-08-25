@@ -15,7 +15,11 @@ import 'settings_service.dart';
 /// Read straight off the raw response rather than through the `Capabilities`
 /// model: adding a field there needs a codegen run, which is currently broken.
 class DshEndpoint {
-  const DshEndpoint({this.available = false, this.url});
+  const DshEndpoint({
+    this.available = false,
+    this.url,
+    this.viaNgrok = false,
+  });
 
   /// A `dsh web` is running on the host.
   final bool available;
@@ -23,6 +27,11 @@ class DshEndpoint {
   /// Full URL to open in a WebView. Null when the relay isn't up, which
   /// happens if dsh started after the daemon did.
   final String? url;
+
+  /// Whether [url] is an ngrok tunnel. Free tunnels answer a browser's first
+  /// navigation with an interstitial instead of the page, unless the request
+  /// carries `ngrok-skip-browser-warning`.
+  final bool viaNgrok;
 
   bool get usable => available && url != null;
 }
@@ -51,6 +60,14 @@ final dshEndpointProvider = FutureProvider<DshEndpoint>((ref) async {
     // only allow a WebSocket from a plain-HTTP page on loopback, so off this
     // machine the relay has to be HTTPS and dsh's UI would otherwise load
     // but never populate.
+    // A public tunnel wins when the host has one: it resolves through public
+    // DNS, so it works on networks where the tailnet name does not — which is
+    // exactly the case this app kept failing in.
+    final publicUrl = (dsh['publicUrl'] as String?)?.trim();
+    if (publicUrl != null && publicUrl.isNotEmpty) {
+      return DshEndpoint(available: true, url: publicUrl, viaNgrok: true);
+    }
+
     final base = Uri.parse(profile.url);
     final tls = dsh['relayTls'] == true;
     // Over TLS the certificate is issued for a name, so the host reports which

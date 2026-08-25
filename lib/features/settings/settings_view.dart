@@ -17,6 +17,7 @@ import '../../services/snapshot_service.dart';
 import '../usb/usb_devices_page.dart';
 import 'usage_page.dart';
 import 'widgets/settings_rows.dart';
+import '../../core/widgets/content_pane.dart';
 
 // ===========================================================================
 // Main settings page — iOS-style master list (label + current value + chevron);
@@ -51,7 +52,7 @@ class SettingsView extends ConsumerWidget {
         title: const Text('设置'),
         backgroundColor: settingsBg(context),
       ),
-      body: ListView(
+      body: ContentPane(child: ListView(
         padding: const EdgeInsets.only(top: 4, bottom: 100),
         children: [
           const SettingsSectionHeader('连接'),
@@ -137,7 +138,7 @@ class SettingsView extends ConsumerWidget {
             ),
           ]),
         ],
-      ),
+      )),
     );
   }
 
@@ -281,7 +282,7 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
           ),
         ],
       ),
-      body: RefreshIndicator(
+      body: ContentPane(child: RefreshIndicator(
         onRefresh: () async => _reloadApps(),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -313,7 +314,7 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
             _AppsList(future: _apps, api: api, onQuit: _quitApp),
           ],
         ),
-      ),
+      )),
     );
   }
 }
@@ -337,7 +338,7 @@ class _ServersListPage extends ConsumerWidget {
         title: const Text('服务器'),
         backgroundColor: settingsBg(context),
       ),
-      body: ListView(
+      body: ContentPane(child: ListView(
         padding: const EdgeInsets.only(top: 12, bottom: 32),
         children: [
           SettingsGrouped(children: [
@@ -372,7 +373,7 @@ class _ServersListPage extends ConsumerWidget {
             ),
           ]),
         ],
-      ),
+      )),
     );
   }
 }
@@ -667,7 +668,7 @@ class _OpenAppPageState extends State<_OpenAppPage> {
         title: const Text('打开应用'),
         backgroundColor: settingsBg(context),
       ),
-      body: Column(
+      body: ContentPane(child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -741,7 +742,7 @@ class _OpenAppPageState extends State<_OpenAppPage> {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 }
@@ -980,7 +981,7 @@ class ServerEditPageState extends ConsumerState<ServerEditPage> {
           TextButton(onPressed: _save, child: const Text('保存')),
         ],
       ),
-      body: ListView(
+      body: ContentPane(child: ListView(
         children: [
           const SizedBox(height: 12),
           if (_isNew) const _SetupHint(),
@@ -1018,7 +1019,7 @@ class ServerEditPageState extends ConsumerState<ServerEditPage> {
             ]),
           ],
         ],
-      ),
+      )),
     );
   }
 }
@@ -1122,7 +1123,7 @@ class _RefreshPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: settingsBg(context),
       appBar: AppBar(title: const Text('刷新频率')),
-      body: ListView(
+      body: ContentPane(child: ListView(
         children: [
           const SizedBox(height: 12),
           SettingsGrouped(children: [
@@ -1138,7 +1139,7 @@ class _RefreshPage extends ConsumerWidget {
             ],
           ]),
         ],
-      ),
+      )),
     );
   }
 }
@@ -1173,7 +1174,7 @@ class _QuickButtonsPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: ListView(
+      body: ContentPane(child: ListView(
         children: [
           const SizedBox(height: 12),
           SettingsGrouped(children: [
@@ -1211,7 +1212,7 @@ class _QuickButtonsPage extends ConsumerWidget {
                 style: TextStyle(fontSize: 12, color: Colors.grey)),
           ),
         ],
-      ),
+      )),
     );
   }
 
@@ -1284,7 +1285,7 @@ class _CcSwitchPageState extends ConsumerState<_CcSwitchPage> {
           IconButton(icon: const Icon(Icons.refresh), onPressed: _reload),
         ],
       ),
-      body: FutureBuilder<CcSwitchStatusResponse>(
+      body: ContentPane(child: FutureBuilder<CcSwitchStatusResponse>(
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
@@ -1328,7 +1329,7 @@ class _CcSwitchPageState extends ConsumerState<_CcSwitchPage> {
             ],
           );
         },
-      ),
+      )),
     );
   }
 }

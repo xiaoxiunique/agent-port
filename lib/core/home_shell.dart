@@ -8,6 +8,7 @@ import '../features/monitor/monitor_page.dart';
 import '../features/settings/settings_view.dart';
 import '../services/api_provider.dart';
 import '../services/dsh_service.dart';
+import 'breakpoints.dart';
 
 /// Root tab shell: 首页 / 定时 / DeepSeek / 设置.
 ///
@@ -79,10 +80,42 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     // The tab count changes when capabilities arrive; clamp so a selection made
     // before that can't point past the end of the list.
     final index = _index.clamp(0, pages.length - 1);
+    final body = IndexedStack(index: index, children: pages);
+
+    // A bottom bar reads as stranded once the window is tablet-width, and the
+    // glass bar wraps UITabBarController, which iPadOS relocates to the top on
+    // its own terms. The rail sidesteps both.
+    if (context.windowSize.usesRail) {
+      return Scaffold(
+        body: Row(
+          children: [
+            NavigationRail(
+              selectedIndex: index,
+              onDestinationSelected: _select,
+              // Labels only fit alongside the icons once there's room for them.
+              extended: context.windowSize == WindowSize.expanded,
+              labelType: context.windowSize == WindowSize.expanded
+                  ? null
+                  : NavigationRailLabelType.all,
+              destinations: [
+                for (final d in destinations)
+                  NavigationRailDestination(
+                    icon: d.icon,
+                    selectedIcon: d.selectedIcon,
+                    label: Text(d.label),
+                  ),
+              ],
+            ),
+            const VerticalDivider(width: 1, thickness: 1),
+            Expanded(child: body),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       extendBody: true,
-      body: IndexedStack(index: index, children: pages),
+      body: body,
       bottomNavigationBar: NativeGlassNavBar(
         currentIndex: index,
         onTap: _select,

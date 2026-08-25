@@ -23,7 +23,7 @@ class _DshPageState extends ConsumerState<DshPage> {
   bool _loading = true;
   String _error = '';
 
-  void _ensureController(String url) {
+  void _ensureController(String url, {bool viaNgrok = false}) {
     // Rebuilt only when the endpoint itself changes (host switch, relay
     // restart), so scroll position and page state survive normal rebuilds.
     if (_loadedUrl == url && _controller != null) return;
@@ -51,7 +51,12 @@ class _DshPageState extends ConsumerState<DshPage> {
           },
         ),
       )
-      ..loadRequest(Uri.parse(url));
+      ..loadRequest(
+        Uri.parse(url),
+        // Free ngrok answers a browser's first navigation with a warning page.
+        // Sub-resources are not affected, so only this request needs it.
+        headers: viaNgrok ? const {'ngrok-skip-browser-warning': '1'} : const {},
+      );
   }
 
   @override
@@ -84,7 +89,7 @@ class _DshPageState extends ConsumerState<DshPage> {
                       'dsh web --trusted-host <电脑地址>',
             );
           }
-          _ensureController(endpoint.url!);
+          _ensureController(endpoint.url!, viaNgrok: endpoint.viaNgrok);
           if (_error.isNotEmpty) {
             return _Unavailable(
               message: '打不开 ${endpoint.url}\n\n$_error',

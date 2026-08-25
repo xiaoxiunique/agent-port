@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/usage_daily.dart';
 import '../../services/api_provider.dart';
 import 'widgets/settings_rows.dart';
+import '../../core/widgets/content_pane.dart';
 
 /// Claude Code + Codex token spend, total and per-day.
 ///
@@ -19,7 +20,7 @@ class UsagePage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: settingsBg(context),
       appBar: AppBar(title: const Text('用量统计')),
-      body: async.when(
+      body: ContentPane(child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _UsageHint('读取用量失败：$e'),
         data: (u) {
@@ -56,7 +57,7 @@ class UsagePage extends ConsumerWidget {
             ),
           );
         },
-      ),
+      )),
     );
   }
 }
