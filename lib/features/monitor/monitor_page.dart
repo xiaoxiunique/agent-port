@@ -9,7 +9,10 @@ import '../../data/models/pane.dart';
 import '../../data/models/pane_ext.dart';
 import '../../data/models/server_profile.dart';
 import '../../data/models/snapshot.dart';
+import '../../core/breakpoints.dart';
+import '../../core/widgets/content_pane.dart';
 import '../../services/demo_data.dart';
+import '../../services/session_labels_service.dart';
 import '../../services/dsh_service.dart';
 import '../../services/settings_service.dart';
 import '../../services/snapshot_service.dart';
@@ -268,19 +271,21 @@ class _Body extends StatelessWidget {
     if (snapshot.panes.isEmpty) {
       // Scrollable so pull-to-refresh works even with no sessions. The add
       // entry stays reachable so a fresh install can launch its first session.
-      return LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
-              child: Column(
-                children: const [
-                  _EmptyState(),
-                  SizedBox(height: 16),
-                  _AddProjectCard(),
-                ],
+      return ContentPane(
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(14, 12, 14, _bottomInset(context)),
+                child: Column(
+                  children: const [
+                    _EmptyState(),
+                    SizedBox(height: 16),
+                    _AddProjectCard(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -288,9 +293,10 @@ class _Body extends StatelessWidget {
       );
     }
     final panes = sortedPanes(snapshot.panes);
-    return ListView.separated(
+    return ContentPane(
+      child: ListView.separated(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
+      padding: EdgeInsets.fromLTRB(14, 12, 14, _bottomInset(context)),
       itemCount: panes.length + 2,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
@@ -298,9 +304,18 @@ class _Body extends StatelessWidget {
         if (i == panes.length) return const _AddProjectCard();
         return const _ProductFooter();
       },
+      ),
     );
   }
 }
+
+/// Bottom padding for the home list.
+///
+/// The phone layout floats a translucent glass tab bar over the content, so
+/// the list has to end above it. The rail sits beside the content instead, and
+/// reserving the same strip there just leaves a dead band at the bottom.
+double _bottomInset(BuildContext context) =>
+    context.windowSize.usesRail ? 24 : 100;
 
 /// Last item of the home list: opens the recent-projects picker to launch a new
 /// Claude/Codex session, so adding doesn't require a trip to Settings.
@@ -369,19 +384,77 @@ class _AddProjectCard extends StatelessWidget {
 
 /// White rounded card row (MonitorView.swift `PaneListItem`):
 /// avatar + project name + time + cleaned title + chevron.
-class _PaneCard extends StatelessWidget {
+/// Rename dialog for a session.
+///
+/// Renames the label the app shows, not the multiplexer session — that name
+/// encodes the directory and is what `amux run` recomputes to find this
+/// session again. Submitting an empty field clears the label and the derived
+/// project name comes back.
+Future<void> _promptRename(
+  BuildContext context,
+  WidgetRef ref,
+  String session,
+  String current,
+) async {
+  final controller = TextEditingController(text: current);
+  final messenger = ScaffoldMessenger.of(context);
+
+  final value = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('重命名会话'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLength: 80,
+        decoration: const InputDecoration(
+          hintText: '留空恢复默认名称',
+          counterText: '',
+        ),
+        onSubmitted: (v) => Navigator.of(ctx).pop(v),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(controller.text),
+          child: const Text('保存'),
+        ),
+      ],
+    ),
+  );
+  if (value == null) return;
+
+  try {
+    await ref.read(sessionLabelsProvider.notifier).rename(session, value);
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('重命名失败:$e')));
+  }
+}
+
+class _PaneCard extends ConsumerWidget {
   const _PaneCard({required this.pane});
   final Pane pane;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // A custom label replaces the name derived from the session id; without
+    // one the derived name is still what shows.
+    final label = ref.watch(sessionLabelsProvider).valueOrNull?[pane.session];
+    final displayName =
+        (label != null && label.isNotEmpty) ? label : pane.projectName;
     final b = theme.brightness;
     return Material(
       color: AgentPortTheme.surface(b),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
+        onLongPress: pane.session.isEmpty
+            ? null
+            : () => _promptRename(context, ref, pane.session, displayName),
         onTap: () {
           if (pane.id.isEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -423,7 +496,7 @@ class _PaneCard extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              pane.projectName,
+                              displayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(

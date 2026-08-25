@@ -268,6 +268,29 @@ class AgentMonitorApi {
     return res.session ?? '';
   }
 
+  /// `GET /api/session/labels` — custom display names, keyed by session name.
+  Future<Map<String, String>> sessionLabels() async {
+    final r = await _dio.get<Map<String, dynamic>>('/api/session/labels');
+    final raw = r.data?['labels'];
+    if (raw is! Map) return {};
+    return raw.map((k, v) => MapEntry('$k', '$v'));
+  }
+
+  /// `POST /api/session/labels` — rename a session, or clear it with an empty
+  /// label. Returns the updated map so the caller need not refetch.
+  Future<Map<String, String>> setSessionLabel(String session, String label) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '/api/session/labels',
+      data: {'session': session, 'label': label},
+    );
+    if (r.data?['ok'] != true) {
+      throw Exception(r.data?['error'] ?? '重命名失败');
+    }
+    final raw = r.data?['labels'];
+    if (raw is! Map) return {};
+    return raw.map((k, v) => MapEntry('$k', '$v'));
+  }
+
   /// Absolute URL for downloading a file, with the auth token appended when
   /// set. Handed to the system browser rather than fetched in-process, so
   /// large artefacts stream straight to the OS downloader.
