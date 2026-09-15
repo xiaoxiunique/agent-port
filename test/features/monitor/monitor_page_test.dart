@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:go_router/go_router.dart';
 import 'package:agent_port/data/models/enums.dart';
 import 'package:agent_port/data/models/pane.dart';
 import 'package:agent_port/data/models/app_settings.dart';
 import 'package:agent_port/data/models/pane_ext.dart';
 import 'package:agent_port/data/models/snapshot.dart';
 import 'package:agent_port/features/monitor/monitor_page.dart';
-import 'package:agent_port/services/collapsed_projects_service.dart';
+import 'package:agent_port/features/monitor/project_sessions_page.dart';
 import 'package:agent_port/services/settings_service.dart';
 import 'package:agent_port/services/snapshot_service.dart';
 
@@ -29,15 +30,15 @@ Pane _pane(String session, {PaneStatus status = PaneStatus.idle}) => Pane(
   updatedAt: '2026-06-21T00:00:00.000Z',
 );
 
-/// One project with three agents in it, and a second with one. The shape that
-/// made the flat list unreadable: five rows all naming the same project.
+/// One project with three agents in it, and one with a single agent. The shape
+/// the home list has to reduce: five rows that all said "reverse".
 Snapshot _snapshot() => Snapshot(
   ok: true,
   now: '2026-06-21T00:00:00.000Z',
   panes: [
-    _pane('cx_reverse_bb8c2d50', status: PaneStatus.idle),
+    _pane('cx_reverse_bb8c2d50'),
     _pane('oc_reverse_bb8c2d50', status: PaneStatus.waiting),
-    _pane('cc_reverse_bb8c2d50', status: PaneStatus.idle),
+    _pane('cc_reverse_bb8c2d50'),
     _pane('p_sitin_914497fb', status: PaneStatus.running),
   ],
 );
@@ -47,99 +48,116 @@ class _Snap extends SnapshotNotifier {
   AsyncValue<Snapshot> build() => AsyncValue.data(_snapshot());
 }
 
+class _Empty extends SnapshotNotifier {
+  @override
+  AsyncValue<Snapshot> build() =>
+      AsyncValue.data(const Snapshot(ok: true, now: ''));
+}
+
 class _Onboarded extends SettingsNotifier {
   @override
   Future<AppSettings> build() async =>
       const AppSettings(hasCompletedOnboarding: true);
 }
 
-class _Collapsed extends CollapsedProjects {
-  _Collapsed(this._initial);
-  final Set<String> _initial;
-  @override
-  Future<Set<String>> build() async => _initial;
-  @override
-  Future<void> toggle(String project) async {
-    final next = {...state.value ?? const <String>{}};
-    if (!next.remove(project)) next.add(project);
-    state = AsyncData(next);
-  }
-}
-
-Future<void> _pumpHome(WidgetTester tester, {Set<String> folded = const {}}) async {
+/// The home list under a router, so a tap actually navigates.
+///
+/// `/` is the monitor page rather than the app's own root, which branches on
+/// the platform — on a test host that is macOS, and macOS gets the server
+/// window. The destinations are the real ones; the pane page is stubbed
+/// because what it renders needs a live server, and what is under test here is
+/// where a tap goes.
+Future<void> _pumpApp(WidgetTester tester, {bool empty = false}) async {
+  final router = GoRouter(
+    initialLocation: '/',
+    routes: [
+      GoRoute(path: '/', builder: (_, _) => const MonitorPage()),
+      GoRoute(
+        path: '/project/:project',
+        builder: (_, state) =>
+            ProjectSessionsPage(project: state.pathParameters['project']!),
+      ),
+      GoRoute(
+        path: '/pane/:paneId',
+        builder: (_, state) => Scaffold(
+          body: Text('pane:${state.pathParameters['paneId']}'),
+        ),
+      ),
+    ],
+  );
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         settingsProvider.overrideWith(() => _Onboarded()),
-        snapshotProvider.overrideWith(() => _Snap()),
-        collapsedProjectsProvider.overrideWith(() => _Collapsed({...folded})),
+        if (empty)
+          snapshotProvider.overrideWith(() => _Empty())
+        else
+          snapshotProvider.overrideWith(() => _Snap()),
       ],
-      child: const MaterialApp(home: MonitorPage()),
+      child: MaterialApp.router(routerConfig: router),
     ),
   );
   await tester.pumpAndSettle();
 }
 
 void main() {
-  group('home list grouping', () {
-    testWidgets('a project is named once, and its agents name themselves', (
-      tester,
-    ) async {
-      await _pumpHome(tester);
+  group('home list', () {
+    testWidgets('one row per project, not one per session', (tester) async {
+      await _pumpApp(tester);
 
-      // The heading carries the project — once, however many sessions it holds.
+      // Two projects, four sessions: two rows.
       expect(find.text('reverse'), findsOneWidget);
       expect(find.text('sitin'), findsOneWidget);
-      // And each card says which agent it is, which is what tells the three
-      // sessions of `reverse` apart. Before grouping they all read "reverse".
+      // The three sessions of `reverse` are not rows of their own.
+      expect(find.text('codex'), findsNothing);
+      expect(find.text('opencode'), findsNothing);
+      // The row says how many are in there instead.
+      expect(find.text('3 个会话'), findsOneWidget);
+      // A lone session names itself, since the row stands in for it.
+      expect(find.text('pi'), findsOneWidget);
+    });
+
+    testWidgets('a project with several sessions opens a list of them', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+      await tester.tap(find.text('reverse'));
+      await tester.pumpAndSettle();
+
+      // Second level: the sessions, each naming its agent.
       expect(find.text('codex'), findsOneWidget);
       expect(find.text('opencode'), findsOneWidget);
       expect(find.text('claude'), findsOneWidget);
-      expect(find.text('pi'), findsOneWidget);
-      // The count sits beside the heading.
-      expect(find.text('3'), findsOneWidget);
+      // And not the other project's.
+      expect(find.text('pi'), findsNothing);
     });
 
-    testWidgets('folding a project hides its sessions and keeps the heading', (
-      tester,
-    ) async {
-      await _pumpHome(tester);
-      expect(find.text('codex'), findsOneWidget);
-
-      await tester.tap(find.text('reverse'));
+    testWidgets('a project with one session opens it directly', (tester) async {
+      await _pumpApp(tester);
+      await tester.tap(find.text('sitin'));
       await tester.pumpAndSettle();
 
-      // Gone: the three cards. Still there: the project, and the other group.
-      expect(find.text('codex'), findsNothing);
-      expect(find.text('opencode'), findsNothing);
-      expect(find.text('reverse'), findsOneWidget);
-      expect(find.text('pi'), findsOneWidget);
-
-      // And back again.
-      await tester.tap(find.text('reverse'));
-      await tester.pumpAndSettle();
-      expect(find.text('codex'), findsOneWidget);
+      // Straight to the pane, with no list of one in between: the session's
+      // own page is titled with its id, and there is no project list showing.
+      expect(find.textContaining('pane:'), findsOneWidget);
+      expect(find.text('3 个会话'), findsNothing);
     });
 
-    testWidgets('a project folded last time comes back folded', (tester) async {
-      await _pumpHome(tester, folded: {'reverse'});
-      expect(find.text('reverse'), findsOneWidget);
-      expect(find.text('codex'), findsNothing);
-      expect(find.text('pi'), findsOneWidget, reason: 'only reverse was folded');
+    testWidgets('shows empty state when no panes', (tester) async {
+      await _pumpApp(tester, empty: true);
+      expect(find.text('没有运行中的 rmux 会话'), findsOneWidget);
     });
   });
 
-  group('most urgent status', () {
-    /// Folded, the heading is the only thing left of the project, so it has to
-    /// carry the session that is blocked on you — not the first one, and not
-    /// the busiest.
-    test('a waiting session outranks everything else in its project', () {
+  group('what a project row has to say', () {
+    /// The row stands in for everything inside it, so the one session that is
+    /// blocked on you has to reach the surface — not the first, not the busiest.
+    test('a waiting session sets the project dot', () {
       final groups = groupPanesByProject(sortedPanes(_snapshot().panes));
       final reverse = groups.firstWhere((g) => g.project == 'reverse');
       expect(reverse.panes.length, 3);
       expect(reverse.mostUrgent, PaneStatus.waiting);
 
-      // The order amux uses, checked end to end rather than assumed.
       ProjectGroup of(List<PaneStatus> s) =>
           ProjectGroup('x', [for (final e in s) _pane('cc_x_1', status: e)]);
       expect(of([PaneStatus.idle, PaneStatus.done]).mostUrgent, PaneStatus.done);
@@ -157,33 +175,13 @@ void main() {
       );
     });
 
-    test('grouping keeps the order sorting put the panes in', () {
+    test('grouping keeps a project together and in sorted order', () {
       final groups = groupPanesByProject(sortedPanes(_snapshot().panes));
       expect(groups.map((g) => g.project).toList(), ['reverse', 'sitin']);
-      // A project's panes stay together rather than being scattered.
-      expect(groups.first.panes.every((p) => p.projectName == 'reverse'), isTrue);
+      expect(
+        groups.first.panes.every((p) => p.projectName == 'reverse'),
+        isTrue,
+      );
     });
   });
-
-  testWidgets('shows empty state when no panes', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          settingsProvider.overrideWith(() => _Onboarded()),
-          snapshotProvider.overrideWith(
-            () => _EmptySnapshotNotifier(),
-          ),
-        ],
-        child: const MaterialApp(home: MonitorPage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('没有运行中的 rmux 会话'), findsOneWidget);
-  });
-}
-
-class _EmptySnapshotNotifier extends SnapshotNotifier {
-  @override
-  AsyncValue<Snapshot> build() =>
-      AsyncValue.data(const Snapshot(ok: true, now: ''));
 }

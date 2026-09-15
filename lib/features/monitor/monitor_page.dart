@@ -12,7 +12,6 @@ import '../../data/models/snapshot.dart';
 import '../../core/breakpoints.dart';
 import '../../core/widgets/content_pane.dart';
 import '../../services/demo_data.dart';
-import '../../services/collapsed_projects_service.dart';
 import '../../services/session_labels_service.dart';
 import '../../services/dsh_service.dart';
 import '../../services/settings_service.dart';
@@ -295,32 +294,19 @@ class _Body extends StatelessWidget {
     }
     final groups = groupPanesByProject(sortedPanes(snapshot.panes));
     return ContentPane(
-      child: Consumer(
-        builder: (context, ref, _) {
-          final collapsed =
-              ref.watch(collapsedProjectsProvider).valueOrNull ??
-              const <String>{};
-          // One entry per group plus the two tail cards. A folded group is one
-          // row instead of however many sessions it holds, which is the whole
-          // point: eight projects and seventeen sessions do not fit a phone,
-          // and scrolling past the ones you are not working on is not reading.
-          return ListView.separated(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(14, 12, 14, _bottomInset(context)),
-            itemCount: groups.length + 2,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, i) {
-              if (i < groups.length) {
-                final group = groups[i];
-                return _ProjectSection(
-                  group: group,
-                  collapsed: collapsed.contains(group.project),
-                );
-              }
-              if (i == groups.length) return const _AddProjectCard();
-              return const _ProductFooter();
-            },
-          );
+      // One row per project, whatever it is running. Seventeen sessions across
+      // eight projects is a list you scroll rather than read; eight is a list
+      // you look at. What a project holds is a tap away, and a project holding
+      // one session skips even that.
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(14, 12, 14, _bottomInset(context)),
+        itemCount: groups.length + 2,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (context, i) {
+          if (i < groups.length) return _ProjectCard(group: groups[i]);
+          if (i == groups.length) return const _AddProjectCard();
+          return const _ProductFooter();
         },
       ),
     );
@@ -452,91 +438,173 @@ Future<void> _promptRename(
   }
 }
 
-/// One project and the sessions running in it.
+/// One project on the home list, whatever it is running.
 ///
-/// A heading with its own sessions beneath, rather than seventeen equal cards:
-/// sorting already put a project's sessions together, but without a line
-/// between them the list reads as one undifferentiated column, and every card
-/// in it carried the same project name.
-class _ProjectSection extends ConsumerWidget {
-  const _ProjectSection({required this.group, required this.collapsed});
+/// The row is the project, not a session: five sessions of `reverse` used to be
+/// five rows all titled "reverse", which is a list you scroll rather than read.
+/// Tapping opens what is inside — unless there is only one thing inside, in
+/// which case it opens that, because a list of one asks nothing.
+class _ProjectCard extends ConsumerWidget {
+  const _ProjectCard({required this.group});
 
   final ProjectGroup group;
-  final bool collapsed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => ref
-              .read(collapsedProjectsProvider.notifier)
-              .toggle(group.project),
+    final b = theme.brightness;
+    final only = group.panes.length == 1 ? group.panes.first : null;
+    // With one session the row stands in for it, so it says what that session
+    // is: its label, or the agent running it. With several it says how many.
+    final labels = ref.watch(sessionLabelsProvider).valueOrNull;
+    final subtitle = switch (only) {
+      null => '${group.panes.length} 个会话',
+      final pane => switch (labels?[pane.session]) {
+        final l? when l.isNotEmpty => l,
+        _ => agentDisplayName(pane),
+      },
+    };
+
+    return Material(
+      color: AgentPortTheme.surface(b),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onLongPress: only == null || only.session.isEmpty
+            ? null
+            : () => _promptRename(context, ref, only.session, subtitle),
+        onTap: () {
+          if (only != null) {
+            if (only.id.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('该会话 pane id 为空,无法打开详情')),
+              );
+              return;
+            }
+            // Pane ids contain '%' (e.g. "%14"); encode so go_router does not
+            // read it as a percent-escape and corrupt the round-trip.
+            context.push('/pane/${Uri.encodeComponent(only.id)}');
+            return;
+          }
+          context.push('/project/${Uri.encodeComponent(group.project)}');
+        },
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: b == Brightness.dark
+                ? Border.all(color: AgentPortTheme.separator(b))
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: AgentPortTheme.cardShadow(b),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+            padding: const EdgeInsets.all(14),
             child: Row(
               children: [
-                Icon(
-                  collapsed ? Icons.chevron_right : Icons.expand_more,
-                  size: 20,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    group.project,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                    ),
+                // One session shows its agent; several show a stack of them, so
+                // the row still says what is in there without being opened.
+                _ProjectAvatars(panes: group.panes),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        group.project,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  '${group.panes.length}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurfaceVariant,
+                // The row stands in for everything inside it, so it has to
+                // carry whatever in there is waiting on you.
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: statusColor(group.mostUrgent, b),
                   ),
                 ),
-                // Folded, the heading is all that is left of the project, so it
-                // has to carry whatever is waiting on you. Open, the sessions
-                // show their own state and a second dot would only repeat them.
-                if (collapsed) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: statusColor(group.mostUrgent, theme.brightness),
-                    ),
-                  ),
-                ],
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: theme.colorScheme.outline,
+                ),
               ],
             ),
           ),
         ),
-        if (!collapsed)
-          for (final pane in group.panes)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: _PaneCard(pane: pane),
-            ),
-      ],
+      ),
     );
   }
 }
 
-class _PaneCard extends ConsumerWidget {
-  const _PaneCard({required this.pane});
+/// The agents running in a project: one avatar, or a few overlapped.
+class _ProjectAvatars extends StatelessWidget {
+  const _ProjectAvatars({required this.panes});
+
+  final List<Pane> panes;
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 44.0;
+    if (panes.length == 1) {
+      return AgentAvatar(session: panes.first.session, size: size);
+    }
+    // Three is enough to say "several"; past that the stack stops being
+    // readable and the count beside it already says how many.
+    final shown = panes.take(3).toList();
+    const step = 13.0;
+    return SizedBox(
+      width: size + step * (shown.length - 1),
+      height: size,
+      child: Stack(
+        children: [
+          for (final (i, pane) in shown.indexed.toList().reversed)
+            Positioned(
+              left: i * step,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(size * 0.16 + 2),
+                  color: AgentPortTheme.surface(Theme.of(context).brightness),
+                ),
+                padding: const EdgeInsets.all(1.5),
+                child: AgentAvatar(session: pane.session, size: size - 3),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One session's card. Used by the project page a row drills into.
+class PaneCard extends ConsumerWidget {
+  const PaneCard({super.key, required this.pane});
   final Pane pane;
 
   @override
