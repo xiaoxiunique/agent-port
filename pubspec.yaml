@@ -63,6 +63,8 @@ flutter:
     - assets/tray_icon.png
     - assets/claude-avatar.png
     - assets/codex-avatar.png
+    - assets/opencode-avatar.png
+    - assets/pi-avatar.png
 
 # App icons for all platforms, generated from the single source PNG via
 # `dart run flutter_launcher_icons`. The source is full-bleed (no alpha).

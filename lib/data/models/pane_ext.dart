@@ -1,14 +1,23 @@
 import 'enums.dart';
 import 'pane.dart';
 
-String? _sessionAgentAlias(String session) {
+/// Which agent a session belongs to, from the prefix amux names it with.
+///
+/// `cc_amux_4d8e0883` is Claude, `cx_…` Codex, `oc_…` opencode, `p_…` pi. A
+/// provider hangs off the prefix with a dash (`cc-glm_…`) and is not part of
+/// the answer.
+///
+/// One function, because there were two and both knew only half the agents —
+/// so opencode and pi sessions drew the fallback terminal glyph while the
+/// sorting quietly treated them as "not Claude".
+String? sessionAgentAlias(String session) {
   final underscore = session.indexOf('_');
   if (underscore <= 0) return null;
   final prefix = session.substring(0, underscore);
   final dash = prefix.indexOf('-');
   final alias = dash > 0 ? prefix.substring(0, dash) : prefix;
   return switch (alias) {
-    'cc' || 'cx' => alias,
+    'cc' || 'cx' || 'oc' || 'p' => alias,
     _ => null,
   };
 }
@@ -55,9 +64,11 @@ extension PaneDisplay on Pane {
   /// Only when no known amux prefix is present do we fall back to stable
   /// session/command text — never volatile title/tail.
   bool get isCodexPane {
-    final alias = _sessionAgentAlias(session);
-    if (alias == 'cc') return false;
-    if (alias == 'cx') return true;
+    // A known prefix settles it, opencode and pi included. Falling through to
+    // the text search for those meant a project with "codex" in its name made
+    // an opencode pane submit with Tab, which is not its submit key.
+    final alias = sessionAgentAlias(session);
+    if (alias != null) return alias == 'cx';
     return '$session\n$command'.toLowerCase().contains('codex');
   }
 
@@ -65,7 +76,7 @@ extension PaneDisplay on Pane {
   String get sendSubmitKey => isCodexPane ? 'Tab' : 'Enter';
 
   /// True for Claude Code panes (session prefix `cc_` or `cc-provider_`).
-  bool get isClaudePane => _sessionAgentAlias(session) == 'cc';
+  bool get isClaudePane => sessionAgentAlias(session) == 'cc';
 }
 
 /// Human-readable status label (RealtimeLogPanel header / status pills).
