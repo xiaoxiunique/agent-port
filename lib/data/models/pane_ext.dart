@@ -127,3 +127,60 @@ List<Pane> sortedPanes(List<Pane> panes, {List<String> pinned = const []}) {
   });
   return list;
 }
+
+/// One project's panes, in the order [sortedPanes] already put them.
+class ProjectGroup {
+  const ProjectGroup(this.project, this.panes);
+
+  final String project;
+  final List<Pane> panes;
+
+  /// The status that most wants attention, for the header of a folded group.
+  ///
+  /// Folding a project is how you stop looking at it, so the one line that
+  /// remains has to keep showing an agent that is blocked on you — otherwise
+  /// tidying the list hides the only thing worth interrupting for.
+  PaneStatus get mostUrgent =>
+      panes.map((p) => p.status).reduce((a, b) => _urgency(a) >= _urgency(b) ? a : b);
+}
+
+/// Same order amux uses in its own tree, so the phone and the terminal never
+/// disagree about which project looks the most urgent.
+int _urgency(PaneStatus s) => switch (s) {
+  PaneStatus.waiting => 4,
+  PaneStatus.running => 3,
+  PaneStatus.failed => 2,
+  PaneStatus.done => 1,
+  PaneStatus.idle => 0,
+};
+
+/// Split panes into per-project runs, keeping the order they arrive in.
+///
+/// [sortedPanes] already puts a project's panes together — pinned first, then
+/// by name — so this only has to find the boundaries. Grouping by a map would
+/// throw that ordering away.
+List<ProjectGroup> groupPanesByProject(List<Pane> panes) {
+  final groups = <ProjectGroup>[];
+  for (final pane in panes) {
+    final project = pane.projectName;
+    if (groups.isNotEmpty && groups.last.project == project) {
+      groups.last.panes.add(pane);
+    } else {
+      groups.add(ProjectGroup(project, [pane]));
+    }
+  }
+  return groups;
+}
+
+/// The agent's own name, for a row that sits under a project heading.
+///
+/// The project is already on the heading, so repeating it on every card below
+/// says nothing — what tells five sessions of one project apart is which agent
+/// each one is.
+String agentDisplayName(Pane pane) => switch (sessionAgentAlias(pane.session)) {
+  'cc' => 'claude',
+  'cx' => 'codex',
+  'oc' => 'opencode',
+  'p' => 'pi',
+  _ => pane.command.isEmpty ? 'shell' : pane.command,
+};
