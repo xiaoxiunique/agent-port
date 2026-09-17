@@ -14,6 +14,7 @@ import '../files/file_browser_page.dart';
 import '../sessions/session_list_page.dart';
 import 'input_bar.dart';
 import 'pane_settings_page.dart';
+import 'session_timer_page.dart';
 import 'terminal_pane_view.dart';
 
 /// Single-page pane detail with a Logs/Terminal mode toggle and a unified
@@ -112,6 +113,16 @@ class _PaneDetailPageState extends ConsumerState<PaneDetailPage> {
               ),
             ),
           ],
+          if (foundPane != null)
+            IconButton(
+              icon: const Icon(Icons.timer_outlined),
+              tooltip: '定时任务',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SessionTimerPage(pane: foundPane),
+                ),
+              ),
+            ),
           if (foundPane != null)
             IconButton(
               icon: const Icon(Icons.notifications_none),

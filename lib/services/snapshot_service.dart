@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../data/models/session_timer.dart';
 import '../data/models/snapshot.dart';
 import 'api_provider.dart';
 import 'demo_data.dart';
@@ -102,10 +103,23 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>>
       final decoded = jsonDecode(message as String) as Map<String, dynamic>;
       final snapJson =
           (decoded['snapshot'] as Map<String, dynamic>?) ?? decoded;
-      if (!_disposed) state = AsyncValue.data(Snapshot.fromJson(snapJson));
+      if (!_disposed) {
+        state = AsyncValue.data(Snapshot.fromJson(snapJson));
+        _publishTimers(snapJson);
+      }
     } catch (_) {
       // Ignore malformed frames; the next frame retries.
     }
+  }
+
+  /// Hand the armed schedules to [sessionTimersProvider].
+  ///
+  /// They ride along in the snapshot but cannot live on [Snapshot], which is
+  /// freezed — so they are read off the raw payload here, at the one place both
+  /// the socket and the poller already hold it.
+  void _publishTimers(Map<String, dynamic> snapJson) {
+    ref.read(sessionTimersProvider.notifier).state =
+        timersFromSnapshotJson(snapJson);
   }
 
   void _onClosed() {
@@ -130,8 +144,11 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>>
   Future<void> _pollOnce() async {
     if (_disposed) return;
     try {
-      final snap = await ref.read(apiProvider).snapshot();
-      if (!_disposed) state = AsyncValue.data(snap);
+      final json = await ref.read(apiProvider).snapshotJson();
+      if (!_disposed) {
+        state = AsyncValue.data(Snapshot.fromJson(json));
+        _publishTimers(json);
+      }
     } catch (_) {
       // Keep last good state; polling retries on the next tick.
     }
@@ -172,6 +189,14 @@ class SnapshotNotifier extends Notifier<AsyncValue<Snapshot>>
     _teardownConnections();
   }
 }
+
+/// Armed schedules by session, refreshed with every snapshot.
+///
+/// Empty until the first frame lands, and empty for any session without one —
+/// absence is how the server says "not armed".
+final sessionTimersProvider = StateProvider<Map<String, SessionTimer>>(
+  (_) => const {},
+);
 
 final snapshotProvider =
     NotifierProvider<SnapshotNotifier, AsyncValue<Snapshot>>(

@@ -69,8 +69,45 @@ class AgentMonitorApi {
 
   /// `GET /api/snapshot`
   Future<Snapshot> snapshot() async {
+    return Snapshot.fromJson(await snapshotJson());
+  }
+
+  /// `GET /api/snapshot`, undecoded.
+  ///
+  /// [Snapshot] cannot carry every field the server sends — `timer` among them,
+  /// since adding it to the freezed [Pane] needs code generation this project
+  /// cannot run. Callers that want those read them off the raw map.
+  Future<Map<String, dynamic>> snapshotJson() async {
     final r = await _dio.get<Map<String, dynamic>>('/api/snapshot');
-    return Snapshot.fromJson(r.data!);
+    return r.data!;
+  }
+
+  /// `POST /api/timer/enable` — put a session on a schedule, or take it off one.
+  ///
+  /// Enabling disables auto mode on the same session, server-side: both type
+  /// into the same pane, so leaving both on would have them interrupt each
+  /// other.
+  Future<void> timerEnable({
+    required String session,
+    required String prompt,
+    required int everySecs,
+  }) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/api/timer/enable',
+      data: {
+        'session': session,
+        'prompt': prompt,
+        'everySecs': everySecs,
+        'enabled': true,
+      },
+    );
+  }
+
+  Future<void> timerDisable(String session) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/api/timer/enable',
+      data: {'session': session, 'enabled': false},
+    );
   }
 
   /// `GET /api/pane/context?paneId=&lines=`
