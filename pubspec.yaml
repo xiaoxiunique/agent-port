@@ -1,7 +1,7 @@
 name: agent_port
 description: "Agent Port — Flutter client for Agent Monitor (tmux agent session monitor & control)."
 publish_to: 'none'
-version: 1.3.0+50
+version: 1.3.0+51
 
 environment:
   sdk: ^3.10.7
@@ -31,7 +31,8 @@ dependencies:
   wakelock_plus: ^1.2.8
   package_info_plus: ^10.1.0
   crypto: ^3.0.6
-  native_glass_navbar: ^1.0.2
+  # 1.1.0+ needs Xcode 27 (iOS 27 UITab APIs); this machine is on Xcode 26.
+  native_glass_navbar: 1.0.2
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.0.0
   url_launcher: ^6.3.1
